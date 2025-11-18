@@ -23,9 +23,14 @@ app.use('/', (req, res) => {
     res.send("welcome to the server");
 })
 
+app.use('/home', (req, res) => {
+    res.send("Welcome to the user server side");
+})
+
 // error handler
 app.use(errorHandler);
 
 // start server
 const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
