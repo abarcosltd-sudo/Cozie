@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Library - Cozie</title>
+    <meta name="description" content="Your personal music library on Cozie">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#4F46E5",
+                        secondary: "#10B981",
+                        dark: "#1E293B",
+                        light: "#F8FAFC"
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Navigation (same as index.html) -->
+    <nav class="bg-white shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0 flex items-center">
+                        <i class="fas fa-music text-primary text-2xl mr-2"></i>
+                        <span class="text-xl font-bold text-dark">Cozie</span>
+                    </div>
+                    <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+                        <a href="index.html" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Home</a>
+                        <a href="browse.html" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Browse</a>
+                        <a href="library.html" class="border-primary text-dark inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Library</a>
+                    </div>
+                </div>
+                <!-- Rest of navigation same as index.html -->
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Library Header -->
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-dark">Your Library</h1>
+            <div class="flex space-x-4">
+                <button class="bg-primary text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+                    <i class="fas fa-plus mr-2"></i> Create Playlist
+                </button>
+                <button class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-full text-sm font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+                    <i class="fas fa-sort mr-2"></i> Sort
+                </button>
+            </div>
+        </div>
+
+        <!-- Library Tabs -->
+        <div class="border-b border-gray-200 mb-8">
+            <nav class="-mb-px flex space-x-8">
+                <a href="#" class="border-primary text-primary whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Playlists</a>
+                <a href="#" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Podcasts</a>
+                <a href="#" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Artists</a>
+                <a href="#" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Albums</a>
+            </nav>
+        </div>
+
+        <!-- Playlists Grid -->
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+            <div class="bg-gradient-to-br from-purple-500 to-blue-600 rounded-lg p-6 text-white aspect-square flex flex-col justify-center items-center hover:shadow-lg transition-shadow">
+                <i class="fas fa-plus text-2xl mb-2"></i>
+                <h3 class="text-lg font-bold">New Playlist</h3>
+            </div>
+            <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                <img src="https://picsum.photos/300/300?random=41" alt="Liked Songs" class="w-full aspect-square object-cover">
+                <div class="p-3">
+                    <h3 class="font-medium text-dark">Liked Songs</h3>
+                    <p class="text-gray-500 text-sm">245 songs</p>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                <img src="https://picsum.photos/300/300?random=42" alt="Workout Mix" class="w-full aspect-square object-cover">
+                <div class="p-3">
+                    <h3 class="font-medium text-dark">Workout Mix</h3>
+                    <p class="text-gray-500 text-sm">85 songs</p>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                <img src="https://picsum.photos/300/300?random=43" alt="Chill Vibes" class="w-full aspect-square object-cover">
+                <div class="p-3">
+                    <h3 class="font-medium text-dark">Chill Vibes</h3>
+                    <p class="text-gray-500 text-sm">120 songs</p>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                <img src="https://picsum.photos/300/300?random=44" alt="Road Trip" class="w-full aspect-square object-cover">
+                <div class="p-3">
+                    <h3 class="font-medium text-dark">Road Trip</h3>
+                    <p class="text-gray-500 text-sm">90 songs</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recently Played -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-dark mb-6">Recently Played</h2>
+            <div class="bg-white rounded-lg shadow-sm overflow-hidden">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Artist</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Album</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">1</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex items-center">
+                                    <div class="flex-shrink-0 h-10 w-10">
+                                        <img class="h-10 w-10 rounded" src="https://picsum.photos/100?random=45" alt="Song cover">
+                                    </div>
+                                    <div class="ml-4">
+                                        <div class="text-sm font-medium text-dark">Summer Nights</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm text-gray-900">The Dreamers</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm text-gray-900">Midnight Memories</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">3:45</td>
+                        </tr>
+                        <!-- Additional recently played items same as index.html -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Followed Artists -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-dark mb-6">Followed Artists</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow text-center p-4">
+                    <img src="https://picsum.photos/200/200?random=46" alt="Artist" class="w-full aspect-square rounded-full object-cover mb-3 mx-auto">
+                    <h3 class="font-medium text-dark">The Dreamers</h3>
+                    <p class="text-gray-500 text-sm">Artist</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow text-center p-4">
+                    <img src="https://picsum.photos/200/200?random=47" alt="Artist" class="w-full aspect-square rounded-full object-cover mb-3 mx-auto">
+                    <h3 class="font-medium text-dark">Neon Wave</h3>
+                    <p class="text-gray-500 text-sm">Artist</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow text-center p-4">
+                    <img src="https://picsum.photos/200/200?random=48" alt="Artist" class="w-full aspect-square rounded-full object-cover mb-3 mx-auto">
+                    <h3 class="font-medium text-dark">Urban Beats</h3>
+                    <p class="text-gray-500 text-sm">Artist</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow text-center p-4">
+                    <img src="https://picsum.photos/200/200?random=49" alt="Artist" class="w-full aspect-square rounded-full object-cover mb-3 mx-auto">
+                    <h3 class="font-medium text-dark">Coastal Sounds</h3>
+                    <p class="text-gray-500 text-sm">Artist</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow text-center p-4">
+                    <img src="https://picsum.photos/200/200?random=50" alt="Artist" class="w-full aspect-square rounded-full object-cover mb-3 mx-auto">
+                    <h3 class="font-medium text-dark">Nature's Call</h3>
+                    <p class="text-gray-500 text-sm">Artist</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow text-center p-4">
+                    <img src="https://picsum.photos/200/200?random=51" alt="Artist" class="w-full aspect-square rounded-full object-cover mb-3 mx-auto">
+                    <h3 class="font-medium text-dark">Electric Dreams</h3>
+                    <p class="text-gray-500 text-sm">Artist</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Player Bar (same as index.html) -->
+    <!-- Footer (same as index.html) -->
+<!-- Footer -->
+    <footer class="bg-dark text-white py-12 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
+                <div>
+                    <h3 class="text-lg font-medium mb-4">Cozie</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#" class="text-gray-300 hover:text-white">About</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white">Jobs</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white">For the Record</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-lg font-medium mb-4">Communities</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#" class="text-gray-300 hover:text-white">For Artists</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white">Developers</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white">Advertising</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white">Investors</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-lg font-medium mb-4">Useful links</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#" class="text-gray-300 hover:text-white">Support</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white">Web Player</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white">Free Mobile App</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-lg font-medium mb-4">Connect with us</h3>
+                    <div class="flex space-x-4 mb-4">
+                        <a href="#" class="text-gray-300 hover:text-white"><i class="fab fa-facebook-f"></i></a>
+                        <a href="#" class="text-gray-300 hover:text-white"><i class="fab fa-twitter"></i></a>
+                        <a href="#" class="text-gray-300 hover:text-white"><i class="fab fa-instagram"></i></a>
+                        <a href="#" class="text-gray-300 hover:text-white"><i class="fab fa-tiktok"></i></a>
+                    </div>
+                    <button class="bg-white text-dark px-4 py-2 rounded-full text-sm font-medium hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white">
+                        <i class="fas fa-globe mr-2"></i> English
+                    </button>
+                </div>
+            </div>
+            <div class="border-t border-gray-700 mt-8 pt-8 flex flex-col md:flex-row justify-between items-center">
+                <div class="flex space-x-6 mb-4 md:mb-0">
+                    <a href="#" class="text-gray-300 hover:text-white text-sm">Legal</a>
+                    <a href="#" class="text-gray-300 hover:text-white text-sm">Privacy Center</a>
+                    <a href="#" class="text-gray-300 hover:text-white text-sm">Privacy Policy</a>
+                    <a href="#" class="text-gray-300 hover:text-white text-sm">Cookies</a>
+                    <a href="#" class="text-gray-300 hover:text-white text-sm">About Ads</a>
+                </div>
+                <div class="text-gray-300 text-sm">
+                    © 2023 Cozie Music, Inc.
+                </div>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

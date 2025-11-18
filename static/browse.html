@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browse - Cozie</title>
+    <meta name="description" content="Browse music by genre, mood, and more on Cozie">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#4F46E5",
+                        secondary: "#10B981",
+                        dark: "#1E293B",
+                        light: "#F8FAFC"
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Navigation (same as index.html) -->
+    <nav class="bg-white shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0 flex items-center">
+                        <i class="fas fa-music text-primary text-2xl mr-2"></i>
+                        <span class="text-xl font-bold text-dark">Cozie</span>
+                    </div>
+                    <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+                        <a href="index.html" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Home</a>
+                        <a href="browse.html" class="border-primary text-dark inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Browse</a>
+                        <a href="library.html" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Library</a>
+                    </div>
+                </div>
+                <!-- Rest of navigation same as index.html -->
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Browse Categories -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-dark mb-6">Browse Categories</h2>
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div class="bg-gradient-to-br from-purple-500 to-blue-600 rounded-lg p-6 text-white aspect-square flex flex-col justify-end hover:shadow-lg transition-shadow">
+                    <h3 class="text-xl font-bold">Pop</h3>
+                    <p class="text-sm opacity-80">1,245 playlists</p>
+                </div>
+                <div class="bg-gradient-to-br from-red-500 to-pink-600 rounded-lg p-6 text-white aspect-square flex flex-col justify-end hover:shadow-lg transition-shadow">
+                    <h3 class="text-xl font-bold">Hip Hop</h3>
+                    <p class="text-sm opacity-80">892 playlists</p>
+                </div>
+                <div class="bg-gradient-to-br from-green-500 to-teal-600 rounded-lg p-6 text-white aspect-square flex flex-col justify-end hover:shadow-lg transition-shadow">
+                    <h3 class="text-xl font-bold">Rock</h3>
+                    <p class="text-sm opacity-80">1,023 playlists</p>
+                </div>
+                <div class="bg-gradient-to-br from-yellow-500 to-orange-600 rounded-lg p-6 text-white aspect-square flex flex-col justify-end hover:shadow-lg transition-shadow">
+                    <h3 class="text-xl font-bold">Electronic</h3>
+                    <p class="text-sm opacity-80">756 playlists</p>
+                </div>
+                <div class="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg p-6 text-white aspect-square flex flex-col justify-end hover:shadow-lg transition-shadow">
+                    <h3 class="text-xl font-bold">R&B</h3>
+                    <p class="text-sm opacity-80">678 playlists</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Moods & Activities -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-dark mb-6">Moods & Activities</h2>
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                    <img src="https://picsum.photos/300/300?random=21" alt="Chill mood" class="w-full aspect-square object-cover">
+                    <div class="p-3">
+                        <h3 class="font-medium text-dark">Chill</h3>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                    <img src="https://picsum.photos/300/300?random=22" alt="Workout mood" class="w-full aspect-square object-cover">
+                    <div class="p-3">
+                        <h3 class="font-medium text-dark">Workout</h3>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                    <img src="https://picsum.photos/300/300?random=23" alt="Focus mood" class="w-full aspect-square object-cover">
+                    <div class="p-3">
+                        <h3 class="font-medium text-dark">Focus</h3>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                    <img src="https://picsum.photos/300/300?random=24" alt="Party mood" class="w-full aspect-square object-cover">
+                    <div class="p-3">
+                        <h3 class="font-medium text-dark">Party</h3>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                    <img src="https://picsum.photos/300/300?random=25" alt="Sleep mood" class="w-full aspect-square object-cover">
+                    <div class="p-3">
+                        <h3 class="font-medium text-dark">Sleep</h3>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                    <img src="https://picsum.photos/300/300?random=26" alt="Road Trip mood" class="w-full aspect-square object-cover">
+                    <div class="p-3">
+                        <h3 class="font-medium text-dark">Road Trip</h3>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Popular Playlists -->
+        <section class="mb-12">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-dark">Popular Playlists</h2>
+                <a href="#" class="text-primary hover:underline">See all</a>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                    <img src="https://picsum.photos/300/300?random=27" alt="Today's Top Hits" class="w-full aspect-square object-cover">
+                    <div class="p-3">
+                        <h3 class="font-medium text-dark truncate">Today's Top Hits</h3>
+                        <p class="text-gray-500 text-sm">Cozie</p>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                    <img src="https://picsum.photos/300/300?random=28" alt="RapCaviar" class="w-full aspect-square object-cover">
+                    <div class="p-3">
+                        <h3 class="font-medium text-dark truncate">RapCaviar</h3>
+                        <p class="text-gray-500 text-sm">Cozie</p>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                    <img src="https://picsum.photos/300/300?random=29" alt="Rock Classics" class="w-full aspect-square object-cover">
+                    <div class="p-3">
+                        <h3 class="font-medium text-dark truncate">Rock Classics</h3>
+                        <p class="text-gray-500 text-sm">Cozie</p>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                    <img src="https://picsum.photos/300/300?random=30" alt="Chill Hits" class="w-full aspect-square object-cover">
+                    <div class="p-3">
+                        <h3 class="font-medium text-dark truncate">Chill Hits</h3>
+                        <p class="text-gray-500 text-sm">Cozie</p>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                    <img src="https://picsum.photos/300/300?random=31" alt="Mood Booster" class="w-full aspect-square object-cover">
+                    <div class="p-3">
+                        <h3 class="font-medium text-dark truncate">Mood Booster</h3>
+                        <p class="text-gray-500 text-sm">Cozie</p>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                    <img src="https://picsum.photos/300/300?random=32" alt="Indie Mix" class="w-full aspect-square object-cover">
+                    <div class="p-3">
+                        <h3 class="font-medium text-dark truncate">Indie Mix</h3>
+                        <p class="text-gray-500 text-sm">Cozie</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- New Releases -->
+        <section class="mb-12">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-dark">New Releases</h2>
+                <a href="#" class="text-primary hover:underline">See all</a>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                    <img src="https://picsum.photos/300/300?random=33" alt="Album cover" class="w-full aspect-square object-cover">
+                    <div class="p-3">
+                        <h3 class="font-medium text-dark truncate">Midnight Memories</h3>
+                        <p class="text-gray-500 text-sm">The Dreamers</p>
+                        <div class="mt-2 flex justify-between items-center">
+                            <span class="text-xs text-gray-500">12 songs</span>
+                            <button class="text-primary hover:text-indigo-700">
+                                <i class="fas fa-play"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- Additional album items same as index.html -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Player Bar (same as index.html) -->
+    <!-- Footer (same as index.html) -->
+<!-- Footer -->
+    <footer class="bg-dark text-white py-12 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
+                <div>
+                    <h3 class="text-lg font-medium mb-4">Cozie</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#" class="text-gray-300 hover:text-white">About</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white">Jobs</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white">For the Record</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-lg font-medium mb-4">Communities</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#" class="text-gray-300 hover:text-white">For Artists</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white">Developers</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white">Advertising</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white">Investors</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-lg font-medium mb-4">Useful links</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#" class="text-gray-300 hover:text-white">Support</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white">Web Player</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white">Free Mobile App</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-lg font-medium mb-4">Connect with us</h3>
+                    <div class="flex space-x-4 mb-4">
+                        <a href="#" class="text-gray-300 hover:text-white"><i class="fab fa-facebook-f"></i></a>
+                        <a href="#" class="text-gray-300 hover:text-white"><i class="fab fa-twitter"></i></a>
+                        <a href="#" class="text-gray-300 hover:text-white"><i class="fab fa-instagram"></i></a>
+                        <a href="#" class="text-gray-300 hover:text-white"><i class="fab fa-tiktok"></i></a>
+                    </div>
+                    <button class="bg-white text-dark px-4 py-2 rounded-full text-sm font-medium hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white">
+                        <i class="fas fa-globe mr-2"></i> English
+                    </button>
+                </div>
+            </div>
+            <div class="border-t border-gray-700 mt-8 pt-8 flex flex-col md:flex-row justify-between items-center">
+                <div class="flex space-x-6 mb-4 md:mb-0">
+                    <a href="#" class="text-gray-300 hover:text-white text-sm">Legal</a>
+                    <a href="#" class="text-gray-300 hover:text-white text-sm">Privacy Center</a>
+                    <a href="#" class="text-gray-300 hover:text-white text-sm">Privacy Policy</a>
+                    <a href="#" class="text-gray-300 hover:text-white text-sm">Cookies</a>
+                    <a href="#" class="text-gray-300 hover:text-white text-sm">About Ads</a>
+                </div>
+                <div class="text-gray-300 text-sm">
+                    © 2023 Cozie Music, Inc.
+                </div>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>
