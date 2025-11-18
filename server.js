@@ -19,9 +19,6 @@ app.use(express.json());
 
 // routes
 app.use("/api/users", userRoutes);
-app.use('/', (req, res) => {
-    res.send("welcome to the server");
-})
 
 app.use('/api/home', (req, res) => {
     res.send("Welcome to the user server side");
@@ -34,4 +31,5 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
