@@ -24,6 +24,14 @@ app.use('/api/home', (req, res) => {
     res.send("Welcome to the user server side");
 })
 
+app.post("/api/test", (req, res) => {
+  console.log("Received:", req.body);
+  res.json({
+    status: "OK",
+    received: req.body
+  });
+});
+
 // error handler
 app.use(errorHandler);
 
@@ -31,5 +39,6 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
