@@ -17,7 +17,8 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:3000",     // React local dev
   "http://localhost:8100",     // Ionic React local dev
-  "https://cozie-cs.vercel.app/"  // Production URL
+  "https://cozie-cs.vercel.app",  //client url
+  "https://cozie-kohl.vercel.app" //backend url
 ];
 
 const corsOptions = {
@@ -38,7 +39,6 @@ app.use(cors(corsOptions));
 
 
 // middleware
-app.use(cors());
 app.use(express.json());
 
 // routes
@@ -63,6 +63,7 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
 
