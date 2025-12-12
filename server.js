@@ -13,6 +13,30 @@ const app = express();
 // connect DB
 //connectDB();
 
+// ===== CORS SETTINGS =====
+const allowedOrigins = [
+  "http://localhost:3000",     // React local dev
+  "http://localhost:8100",     // Ionic React local dev
+  "https://cozie-cs.vercel.app/"  // Production URL
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("CORS not allowed"));
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+  credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization"]
+};
+
+app.use(cors(corsOptions));
+// ==========================
+
+
 // middleware
 app.use(cors());
 app.use(express.json());
@@ -39,6 +63,7 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
 
