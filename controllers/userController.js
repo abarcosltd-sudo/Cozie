@@ -14,7 +14,7 @@ const users = [
 // @desc    Login user
 // @route   POST /api/users/login
 // @access  Public
-const loginUser = async (req, res) => {
+exports.loginUser = async (req, res) => {
   try {
     // Log that we received the request
     console.log('📥 Login request received at:', new Date().toISOString());
@@ -96,4 +96,5 @@ exports.createUser = async (req, res, next) => {
     next(err);
   }
 };
+
 
