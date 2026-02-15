@@ -100,8 +100,9 @@ const createUser = async (req, res, next) => {
 module.exports = {
   loginUser,
   createUser,
-  getUser
+  getUsers
 };
+
 
 
 
