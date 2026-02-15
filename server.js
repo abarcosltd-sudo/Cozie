@@ -36,7 +36,14 @@ const corsOptions = {
 
 // More detailed CORS configuration
 app.use(cors({
-  origin: 'https://cozie-cs.vercel.app', // Your React app's URL
+  origin:  function (origin, callback) {
+    // Allow all Vercel app subdomains or any origin that ends with vercel.app
+    if (!origin || origin.includes('vercel.app') || origin.includes('localhost')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }, // Your React app's URL
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -71,6 +78,7 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
 
