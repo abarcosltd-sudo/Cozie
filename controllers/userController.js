@@ -76,7 +76,7 @@ const loginUser = async (req, res, next) => {
 
 
 // @desc Get all users
-exports.getUsers = async (req, res, next) => {
+const getUsers = async (req, res, next) => {
   try {
     const users = await User.find();
     res.json(users);
@@ -86,7 +86,7 @@ exports.getUsers = async (req, res, next) => {
 };
 
 // @desc Create a new user
-exports.createUser = async (req, res, next) => {
+const createUser = async (req, res, next) => {
   try {
     const { name, email } = req.body;
 
@@ -98,7 +98,10 @@ exports.createUser = async (req, res, next) => {
 };
 
 module.exports = {
-  loginUser  // Make sure loginUser is included here
+  loginUser,
+  createUser,
+  getUser
 };
+
 
 
