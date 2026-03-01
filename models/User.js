@@ -5,28 +5,37 @@ class User {
     return db.collection("users");
   }
 
-  static async findByEmail(email) {
-    const snapshot = await this.collection()
-      .where("email", "==", email)
-      .get();
-
-    if (snapshot.empty) return null;
-
-    const doc = snapshot.docs[0];
-    return { id: doc.id, ...doc.data() };
-  }
-
   static async create(data) {
-    const docRef = await this.collection().add(data);
-    return { id: docRef.id, ...data };
+    const {
+      fullname,
+      username,
+      email,
+      password,
+      selectedGenres = []
+    } = data;
+
+    const docRef = await this.collection().add({
+      fullname,
+      username,
+      email,
+      password,
+      selectedGenres,
+      profile: {
+        displayName: fullname,
+        bio: null,
+        photo: null,
+        timestamp: new Date().toISOString()
+      },
+      createdAt: new Date()
+    });
+
+    return { id: docRef.id };
   }
 
-  static async getAll() {
-    const snapshot = await this.collection().get();
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+  static async findById(id) {
+    const doc = await this.collection().doc(id).get();
+    if (!doc.exists) return null;
+    return { id: doc.id, ...doc.data() };
   }
 }
 
