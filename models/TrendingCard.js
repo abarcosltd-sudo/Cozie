@@ -5,25 +5,12 @@ class TrendingCard {
     return db.collection("trendingCards");
   }
 
-  static async create(data) {
-    const { title, artist, thumbnail } = data;
+  static async getByGenres(genres) {
+    const snapshot = await this.collection()
+      .where("genreId", "in", genres)
+      .orderBy("rank", "asc")
+      .get();
 
-    if (!title || !artist || !thumbnail) {
-      throw new Error("All fields are required");
-    }
-
-    const docRef = await this.collection().add({
-      title,
-      artist,
-      thumbnail,
-      createdAt: new Date()
-    });
-
-    return { id: docRef.id, title, artist, thumbnail };
-  }
-
-  static async getAll() {
-    const snapshot = await this.collection().get();
     return snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
