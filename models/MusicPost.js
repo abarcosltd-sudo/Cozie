@@ -7,33 +7,34 @@ class MusicPost {
 
   static async create(data) {
     const {
-      userName,
+      userId,
+      genreId,
       trackTitle,
       trackArtist,
       albumIcon
     } = data;
 
-    if (!userName || !trackTitle || !trackArtist || !albumIcon) {
-      throw new Error("Missing required fields");
+    if (!userId || !genreId) {
+      throw new Error("User and Genre required");
     }
 
     const docRef = await this.collection().add({
-      userName,
-      postTime: new Date().toISOString(),
+      userId,
+      genreId,
       trackTitle,
       trackArtist,
       albumIcon,
       likes: 0,
       comments: 0,
-      liked: false,
       createdAt: new Date()
     });
 
     return { id: docRef.id };
   }
 
-  static async getAll() {
+  static async getByGenres(genres) {
     const snapshot = await this.collection()
+      .where("genreId", "in", genres)
       .orderBy("createdAt", "desc")
       .get();
 
