@@ -159,11 +159,63 @@ const getUsers = async (req, res, next) => {
   }
 };
 
+
+//==========================
+// @desc Get user profile
+//===========================
+const getProfile = async (req, res, next) => {
+  try {
+    // Get Authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    // Verify JWT
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({ message: "Invalid token" });
+    }
+
+    const userId = decoded.id;
+
+    // Fetch user from Firestore
+    const userDoc = await db.collection("users").doc(userId).get();
+
+    if (!userDoc.exists) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const user = userDoc.data();
+
+    // Respond with user info (excluding password)
+    res.status(200).json({
+      success: true,
+      user: {
+        id: userDoc.id,
+        fullname: user.fullname,
+        username: user.username,
+        email: user.email,
+      },
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
+
 module.exports = {
   signupUser,
   loginUser,
-  getUsers
+  getUsers,
+  getProfile
 };
+
 
 
 
