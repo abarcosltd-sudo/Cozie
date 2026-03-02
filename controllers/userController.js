@@ -17,10 +17,10 @@ const signupUser = async (req, res, next) => {
       fullname,
       username,
       email,
-      password,
-      selectedGenres
+      password
     } = req.body;
 
+    // Validate required fields
     if (!fullname || !username || !email || !password) {
       return res.status(400).json({
         success: false,
@@ -28,6 +28,7 @@ const signupUser = async (req, res, next) => {
       });
     }
 
+    // Check if user already exists
     const existingUser = await User.findByEmail(email);
 
     if (existingUser) {
@@ -37,27 +38,30 @@ const signupUser = async (req, res, next) => {
       });
     }
 
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
+    // Create new user
     const newUser = await User.create({
       fullname,
       username,
       email,
-      password: hashedPassword,
-      selectedGenres: selectedGenres || []
+      password: hashedPassword
     });
 
+    // Send response
     res.status(201).json({
       success: true,
       message: "User registered successfully",
       token: generateToken(newUser.id),
       user: {
         id: newUser.id,
-        fullname,
-        username,
-        email
+        fullname: newUser.fullname,
+        username: newUser.username,
+        email: newUser.email
       }
     });
+
   } catch (error) {
     next(error);
   }
@@ -121,3 +125,4 @@ module.exports = {
   loginUser,
   getUsers
 };
+
