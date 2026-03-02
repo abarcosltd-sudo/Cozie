@@ -33,8 +33,6 @@ const corsOptions = {
 // Apply CORS middleware
 app.use(cors(corsOptions));
 
-// Handle preflight requests
-//app.options("*", cors(corsOptions));
 
 // Middleware
 app.use(express.json());
@@ -64,4 +62,5 @@ app.use(errorHandler);
 // Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
