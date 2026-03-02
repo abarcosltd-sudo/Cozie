@@ -25,7 +25,7 @@ const signupUser = async (req, res, next) => {
 
     const normalizedEmail = email.toLowerCase();
 
-    // 1️⃣ Check if user already exists
+    // Check if user already exists
     const userSnapshot = await db
       .collection("users")
       .where("email", "==", normalizedEmail)
@@ -39,10 +39,10 @@ const signupUser = async (req, res, next) => {
       });
     }
 
-    // 2️⃣ Hash password
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // 3️⃣ Create new user document
+    // Create new user document
     const newUserRef = db.collection("users").doc();
 
     const newUser = {
@@ -56,7 +56,7 @@ const signupUser = async (req, res, next) => {
 
     await newUserRef.set(newUser);
 
-    // 4️⃣ Generate JWT directly here
+    // Generate JWT directly here
     const token = jwt.sign(
       { id: newUserRef.id },
       process.env.JWT_SECRET,
@@ -87,15 +87,33 @@ const loginUser = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findByEmail(email);
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required"
+      });
+    }
 
-    if (!user) {
+    const normalizedEmail = email.toLowerCase();
+
+    // Find user in Firestore
+    const userSnapshot = await db
+      .collection("users")
+      .where("email", "==", normalizedEmail)
+      .limit(1)
+      .get();
+
+    if (userSnapshot.empty) {
       return res.status(401).json({
         success: false,
         message: "Invalid email or password"
       });
     }
 
+    const userDoc = userSnapshot.docs[0];
+    const user = userDoc.data();
+
+    // Compare password
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
@@ -105,21 +123,29 @@ const loginUser = async (req, res, next) => {
       });
     }
 
-    res.json({
+    // Generate JWT
+    const token = jwt.sign(
+      { id: user.id },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.status(200).json({
       success: true,
-      token: generateToken(user.id),
+      token,
       user: {
         id: user.id,
         fullname: user.fullname,
         username: user.username,
-        email: user.email,
-        selectedGenres: user.selectedGenres
+        email: user.email
       }
     });
+
   } catch (error) {
     next(error);
   }
 };
+
 
 // =======================
 // @desc Get all users
@@ -138,6 +164,7 @@ module.exports = {
   loginUser,
   getUsers
 };
+
 
 
 
