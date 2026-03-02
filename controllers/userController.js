@@ -1,7 +1,7 @@
-import { db } from "../config/firebase.js";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import Cors from "cors";
+const { db } = require("../config/firebase");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const Cors = require("cors");
 
 // Setup CORS middleware
 const cors = Cors({
@@ -180,3 +180,4 @@ export const getProfile = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
