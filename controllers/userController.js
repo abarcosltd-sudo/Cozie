@@ -1,3 +1,4 @@
+import admin from "../config/firebase.js"
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
@@ -13,14 +14,8 @@ const generateToken = (id) => {
 // =======================
 const signupUser = async (req, res, next) => {
   try {
-    const {
-      fullname,
-      username,
-      email,
-      password
-    } = req.body;
+    const { fullname, username, email, password } = req.body;
 
-    // Validate required fields
     if (!fullname || !username || !email || !password) {
       return res.status(400).json({
         success: false,
@@ -28,8 +23,14 @@ const signupUser = async (req, res, next) => {
       });
     }
 
-    // Check if user already exists
-    const existingUser = await User.findByEmail(email);
+    // 1️⃣ Check if user already exists in Firebase Auth
+    let existingUser;
+
+    try {
+      existingUser = await admin.auth().getUserByEmail(email);
+    } catch (error) {
+      existingUser = null;
+    }
 
     if (existingUser) {
       return res.status(400).json({
@@ -38,27 +39,33 @@ const signupUser = async (req, res, next) => {
       });
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 12);
+    // 2️⃣ Create user in Firebase Authentication
+    const userRecord = await admin.auth().createUser({
+      email,
+      password,
+      displayName: fullname
+    });
 
-    // Create new user
-    const newUser = await User.create({
+    // 3️⃣ Save extra data in Firestore
+    await admin.firestore().collection("users").doc(userRecord.uid).set({
       fullname,
       username,
       email,
-      password: hashedPassword
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    // Send response
+    // 4️⃣ Generate custom token (optional)
+    const token = await admin.auth().createCustomToken(userRecord.uid);
+
     res.status(201).json({
       success: true,
       message: "User registered successfully",
-      token: generateToken(newUser.id),
+      token,
       user: {
-        id: newUser.id,
-        fullname: newUser.fullname,
-        username: newUser.username,
-        email: newUser.email
+        id: userRecord.uid,
+        fullname,
+        username,
+        email
       }
     });
 
@@ -125,4 +132,5 @@ module.exports = {
   loginUser,
   getUsers
 };
+
 
