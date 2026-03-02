@@ -1,48 +1,66 @@
-import { db } from "../config/firebase.js"
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+import { db } from "../config/firebase.js";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import Cors from "cors";
 
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: "7d"
+// Setup CORS middleware
+const cors = Cors({
+  origin: function (origin, callback) {
+    if (!origin || origin.includes("vercel.app") || origin.includes("localhost")) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+});
+
+// Helper to run middleware in serverless
+function runMiddleware(req, res, fn) {
+  return new Promise((resolve, reject) => {
+    fn(req, res, (result) => {
+      if (result instanceof Error) return reject(result);
+      return resolve(result);
+    });
   });
-};
+}
+
+// Helper to generate JWT
+const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
 // =======================
-// @desc Register user
+// Signup user
 // =======================
-const signupUser = async (req, res, next) => {
+export const signupUser = async (req, res) => {
+  await runMiddleware(req, res, cors);
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ success: false, message: "Method not allowed" });
+  }
+
   try {
     const { fullname, username, email, password } = req.body;
 
     if (!fullname || !username || !email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "All required fields must be provided"
-      });
+      return res.status(400).json({ success: false, message: "All fields are required" });
     }
 
     const normalizedEmail = email.toLowerCase();
 
-    // Check if user already exists
-    const userSnapshot = await db
+    // Check if user exists
+    const snapshot = await db
       .collection("users")
       .where("email", "==", normalizedEmail)
       .limit(1)
       .get();
 
-    if (!userSnapshot.empty) {
-      return res.status(400).json({
-        success: false,
-        message: "User already exists"
-      });
+    if (!snapshot.empty) {
+      return res.status(400).json({ success: false, message: "User already exists" });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
-
-    // Create new user document
     const newUserRef = db.collection("users").doc();
 
     const newUser = {
@@ -51,173 +69,114 @@ const signupUser = async (req, res, next) => {
       username,
       email: normalizedEmail,
       password: hashedPassword,
-      createdAt: new Date()
+      createdAt: new Date(),
     };
 
     await newUserRef.set(newUser);
 
-    // Generate JWT directly here
-    const token = jwt.sign(
-      { id: newUserRef.id },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const token = generateToken(newUserRef.id);
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "User registered successfully",
       token,
-      user: {
-        id: newUserRef.id,
-        fullname,
-        username,
-        email: normalizedEmail
-      }
+      user: { id: newUserRef.id, fullname, username, email: normalizedEmail },
     });
-
-  } catch (error) {
-    next(error);
+  } catch (err) {
+    console.error("Signup error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
 // =======================
-// @desc Login user
+// Login user
 // =======================
-const loginUser = async (req, res, next) => {
+export const loginUser = async (req, res) => {
+  await runMiddleware(req, res, cors);
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ success: false, message: "Method not allowed" });
+  }
+
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "Email and password are required"
-      });
+      return res.status(400).json({ success: false, message: "Email and password are required" });
     }
 
     const normalizedEmail = email.toLowerCase();
 
-    // Find user in Firestore
-    const userSnapshot = await db
+    const snapshot = await db
       .collection("users")
       .where("email", "==", normalizedEmail)
       .limit(1)
       .get();
 
-    if (userSnapshot.empty) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password"
-      });
+    if (snapshot.empty) {
+      return res.status(401).json({ success: false, message: "Invalid email or password" });
     }
 
-    const userDoc = userSnapshot.docs[0];
+    const userDoc = snapshot.docs[0];
     const user = userDoc.data();
 
-    // Compare password
     const isMatch = await bcrypt.compare(password, user.password);
-
     if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password"
-      });
+      return res.status(401).json({ success: false, message: "Invalid email or password" });
     }
 
-    // Generate JWT
-    const token = jwt.sign(
-      { id: user.id },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const token = generateToken(user.id);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       token,
-      user: {
-        id: user.id,
-        fullname: user.fullname,
-        username: user.username,
-        email: user.email
-      }
+      user: { id: user.id, fullname: user.fullname, username: user.username, email: user.email },
     });
-
-  } catch (error) {
-    next(error);
+  } catch (err) {
+    console.error("Login error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
+// =======================
+// Get user profile
+// =======================
+export const getProfile = async (req, res) => {
+  await runMiddleware(req, res, cors);
 
-// =======================
-// @desc Get all users
-// =======================
-const getUsers = async (req, res, next) => {
-  try {
-    const users = await User.getAll();
-    res.json(users);
-  } catch (error) {
-    next(error);
+  if (req.method !== "GET") {
+    return res.status(405).json({ success: false, message: "Method not allowed" });
   }
-};
 
-
-//==========================
-// @desc Get user profile
-//===========================
-const getProfile = async (req, res, next) => {
   try {
-    // Get Authorization header
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "Unauthorized" });
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
     const token = authHeader.split(" ")[1];
 
-    // Verify JWT
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch (err) {
-      return res.status(401).json({ message: "Invalid token" });
+      return res.status(401).json({ success: false, message: "Invalid token" });
     }
 
-    const userId = decoded.id;
-
-    // Fetch user from Firestore
-    const userDoc = await db.collection("users").doc(userId).get();
+    const userDoc = await db.collection("users").doc(decoded.id).get();
 
     if (!userDoc.exists) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
     const user = userDoc.data();
 
-    // Respond with user info (excluding password)
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      user: {
-        id: userDoc.id,
-        fullname: user.fullname,
-        username: user.username,
-        email: user.email,
-      },
+      user: { id: userDoc.id, fullname: user.fullname, username: user.username, email: user.email },
     });
-
-  } catch (error) {
-    next(error);
+  } catch (err) {
+    console.error("Profile error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
-
-
-module.exports = {
-  signupUser,
-  loginUser,
-  getUsers,
-  getProfile
-};
-
-
-
-
-
-
