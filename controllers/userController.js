@@ -23,49 +23,55 @@ const signupUser = async (req, res, next) => {
       });
     }
 
-    // 1️⃣ Check if user already exists in Firebase Auth
-    let existingUser;
+    const normalizedEmail = email.toLowerCase();
 
-    try {
-      existingUser = await admin.auth().getUserByEmail(email);
-    } catch (error) {
-      existingUser = null;
-    }
+    // 1️⃣ Check if user already exists
+    const userSnapshot = await db
+      .collection("users")
+      .where("email", "==", normalizedEmail)
+      .limit(1)
+      .get();
 
-    if (existingUser) {
+    if (!userSnapshot.empty) {
       return res.status(400).json({
         success: false,
         message: "User already exists"
       });
     }
 
-    // 2️⃣ Create user in Firebase Authentication
-    const userRecord = await admin.auth().createUser({
-      email,
-      password,
-      displayName: fullname
-    });
+    // 2️⃣ Hash password
+    const hashedPassword = await bcrypt.hash(password, 12);
 
-    // 3️⃣ Save extra data in Firestore
-    await admin.firestore().collection("users").doc(userRecord.uid).set({
+    // 3️⃣ Create new user document
+    const newUserRef = db.collection("users").doc();
+
+    const newUser = {
+      id: newUserRef.id,
       fullname,
       username,
-      email,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+      email: normalizedEmail,
+      password: hashedPassword,
+      createdAt: new Date()
+    };
 
-    // 4️⃣ Generate custom token (optional)
-    const token = await admin.auth().createCustomToken(userRecord.uid);
+    await newUserRef.set(newUser);
+
+    // 4️⃣ Generate JWT directly here
+    const token = jwt.sign(
+      { id: newUserRef.id },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
     res.status(201).json({
       success: true,
       message: "User registered successfully",
       token,
       user: {
-        id: userRecord.uid,
+        id: newUserRef.id,
         fullname,
         username,
-        email
+        email: normalizedEmail
       }
     });
 
@@ -132,5 +138,6 @@ module.exports = {
   loginUser,
   getUsers
 };
+
 
 
