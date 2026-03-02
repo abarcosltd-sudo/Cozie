@@ -5,8 +5,10 @@ const { getUsers, signupUser, loginUser } = require("../controllers/userControll
 router.get("/", getUsers);
 router.post("/signup", signupUser);
 router.post("/login", loginUser);
+router.get("/profile", getProfile);
 
 
 module.exports = router;
+
 
 
