@@ -1,4 +1,4 @@
-import admin from "../config/firebase.js"
+import { db } from "../config/firebase.js"
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
@@ -138,6 +138,7 @@ module.exports = {
   loginUser,
   getUsers
 };
+
 
 
 
