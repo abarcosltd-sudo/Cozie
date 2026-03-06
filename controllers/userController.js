@@ -1,5 +1,3 @@
-
-
 import { db } from "../config/firebase.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -231,6 +229,7 @@ export const getProfile = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
 
 
 
