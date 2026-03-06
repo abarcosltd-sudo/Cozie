@@ -1,7 +1,8 @@
 // server.js
 import express from "express";
 import cors from "cors";
-// import dotenv from "dotenv";
+import nodemailer from 'nodemailer'; // or use your preferred email service
+//import dotenv from "dotenv";
 // dotenv.config();
 
 import userRoutes from "./routes/userRoutes.js";
@@ -85,6 +86,7 @@ app.use(errorHandler);
 // Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
 
