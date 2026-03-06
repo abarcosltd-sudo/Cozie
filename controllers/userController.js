@@ -32,41 +32,32 @@ function runMiddleware(req, res, fn) {
 // Helper to generate JWT
 const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
-// Configure email transporter (use environment variables)
-const transporter = nodemailer.createTransport({
-  service: 'gmail', // or your email service
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+// Configure transporter once (outside the handler)
+let transporter;
+try {
+  transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+} catch (err) {
+  console.error('Failed to create email transporter:', err);
+}
 
-// Helper to generate 6-digit OTP
-const generateOTP = () => {
-  return crypto.randomInt(100000, 999999).toString(); // ensures 6 digits
-};
+const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
-// Helper to send OTP email
 const sendOTPEmail = async (email, otp) => {
+  if (!transporter) throw new Error('Email transporter not configured');
   const mailOptions = {
     from: process.env.EMAIL_USER,
     to: email,
     subject: 'Your COZIE Verification Code',
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #a855f7;">Welcome to COZIE!</h2>
-        <p>Your verification code is:</p>
-        <h1 style="background: #f3f4f6; padding: 20px; text-align: center; letter-spacing: 5px; font-size: 36px; border-radius: 8px;">${otp}</h1>
-        <p>This code expires in 10 minutes.</p>
-        <p>If you didn't request this, please ignore this email.</p>
-        <br>
-        <p>– The COZIE Team</p>
-      </div>
-    `,
+    html: `<h1>${otp}</h1><p>Enter this code to verify your email.</p>`,
   };
   await transporter.sendMail(mailOptions);
 };
-
 
 // =======================
 // Signup user
@@ -74,36 +65,31 @@ const sendOTPEmail = async (email, otp) => {
 export const signupUser = async (req, res) => {
   await runMiddleware(req, res, cors);
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ success: false, message: "Method not allowed" });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ success: false, message: 'Method not allowed' });
   }
 
   try {
     const { fullname, username, email, password } = req.body;
-
-    if (!fullname || !username || !email || !password) {
-      return res.status(400).json({ success: false, message: "All fields are required" });
-    }
+    // ... validation ...
 
     const normalizedEmail = email.toLowerCase();
 
     // Check if user exists
     const snapshot = await db
-      .collection("users")
-      .where("email", "==", normalizedEmail)
+      .collection('users')
+      .where('email', '==', normalizedEmail)
       .limit(1)
       .get();
-
     if (!snapshot.empty) {
-      return res.status(400).json({ success: false, message: "User already exists" });
+      return res.status(400).json({ success: false, message: 'User already exists' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
-    const newUserRef = db.collection("users").doc();
+    const newUserRef = db.collection('users').doc();
 
-    // Generate OTP and expiry (10 minutes from now)
     const otp = generateOTP();
-    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     const newUser = {
       id: newUserRef.id,
@@ -112,28 +98,39 @@ export const signupUser = async (req, res) => {
       email: normalizedEmail,
       password: hashedPassword,
       createdAt: new Date(),
-      isVerified: false,           // user starts unverified
+      isVerified: false,
       otp: {
-        code: otp,                 // store OTP (consider hashing for production)
+        code: otp,
         expiresAt: otpExpiresAt,
       },
     };
 
     await newUserRef.set(newUser);
 
-    // Send OTP email
-    await sendOTPEmail(normalizedEmail, otp);
+    // Try to send email, but don't fail the signup if it fails
+    let emailSent = false;
+    try {
+      await sendOTPEmail(normalizedEmail, otp);
+      emailSent = true;
+    } catch (emailErr) {
+      console.error('Failed to send OTP email:', emailErr);
+      // Log the full error for debugging
+      console.error('Email error details:', emailErr.message);
+    }
 
-    // Return success WITHOUT token (user not verified)
+    // Always return a 201 success (user is created)
     return res.status(201).json({
       success: true,
-      message: "User registered successfully. Please check your email for verification code.",
-      // Optionally return user info (without token)
+      message: emailSent
+        ? 'User registered successfully. Please check your email for verification code.'
+        : 'User registered, but verification email could not be sent. Please contact support or request a new code.',
       user: { id: newUserRef.id, fullname, username, email: normalizedEmail },
+      emailSent, // optional flag for client
     });
   } catch (err) {
-    console.error("Signup error:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
+    console.error('Signup error:', err);
+    // If the error is from Firestore or bcrypt, it will be caught here
+    return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
@@ -229,6 +226,7 @@ export const getProfile = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
 
 
 
