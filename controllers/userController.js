@@ -227,6 +227,64 @@ export const getProfile = async (req, res) => {
   }
 };
 
+//verify user otp
+export const verifyOTP = async (req, res) => {
+  await runMiddleware(req, res, cors);
+  if (req.method !== 'POST') {
+    return res.status(405).json({ success: false, message: 'Method not allowed' });
+  }
+
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, message: 'Email and OTP are required' });
+    }
+
+    const normalizedEmail = email.toLowerCase();
+    const snapshot = await db.collection('users').where('email', '==', normalizedEmail).limit(1).get();
+    if (snapshot.empty) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const userDoc = snapshot.docs[0];
+    const userData = userDoc.data();
+
+    // Check if already verified
+    if (userData.isVerified) {
+      return res.status(400).json({ success: false, message: 'Email already verified' });
+    }
+
+    // Check OTP expiry
+    if (new Date() > userData.otp.expiresAt.toDate()) {
+      return res.status(400).json({ success: false, message: 'OTP expired' });
+    }
+
+    // Compare OTP (in production, compare hashed values)
+    if (userData.otp.code !== otp) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP' });
+    }
+
+    // Mark as verified and remove OTP fields (optional)
+    await userDoc.ref.update({
+      isVerified: true,
+      otp: null, // or delete field
+    });
+
+    // Generate token (optional)
+    const token = generateToken(userDoc.id);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Email verified successfully',
+      token, // if you want to log user in immediately
+    });
+  } catch (err) {
+    console.error('Verify OTP error:', err);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+
 
 
 
