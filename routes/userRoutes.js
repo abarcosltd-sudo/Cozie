@@ -9,9 +9,10 @@ router.post("/signup", signupUser);
 router.post("/login", loginUser);
 router.get("/profile", getProfile);
 router.post("/verify-otp", verifyOTP);
-router.post("/preferences", protect, savePrefences);
+router.post("/preferences", protect, savePreferences);
 
 export default router;
+
 
 
 
