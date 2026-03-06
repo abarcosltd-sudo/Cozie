@@ -48,6 +48,29 @@ app.get("/api/home", (req, res) => {
   });
 });
 
+app.get('/api/test-email', async (req, res) => {
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+
+  try {
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: 'fredottache@gmail.com', // send to yourself
+      subject: 'Test',
+      text: 'If you see this, email works!',
+    });
+    res.send('Email sent');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Email failed: ' + err.message);
+  }
+});
+
 app.post("/api/test", (req, res) => {
   console.log("Received:", req.body);
   res.json({
@@ -62,5 +85,6 @@ app.use(errorHandler);
 // Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
