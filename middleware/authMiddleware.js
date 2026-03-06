@@ -2,7 +2,7 @@
 import jwt from "jsonwebtoken";
 import { db } from "../config/firebase.js"; // Using Firebase instead of Mongoose
 
-const protect = async (req, res, next) => {
+export const protect = async (req, res, next) => {
   try {
     let token;
 
@@ -43,4 +43,3 @@ const protect = async (req, res, next) => {
   }
 };
 
-export default protect;
