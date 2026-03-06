@@ -1,5 +1,7 @@
 // config/firebase.js
 import admin from "firebase-admin";
+import { getStorage } from "firebase-admin/storage";
+import serviceAccount from "./path/to/serviceAccountKey.json" assert { type: "json" };
 
 // Load environment variables
 const serviceAccount = {
@@ -15,9 +17,11 @@ const serviceAccount = {
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
+    storageBucket: "your-project-id.appspot.com", // your Firebase storage bucket
   });
 }
 
 const db = admin.firestore();
+const bucket = admin.storage().bucket();
 
-export { db };
+export { db, bucket };
