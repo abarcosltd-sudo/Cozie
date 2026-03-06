@@ -1,7 +1,11 @@
+
+
 import { db } from "../config/firebase.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import Cors from "cors";
+import nodemailer from 'nodemailer'; // or use your preferred email service
+import crypto from 'crypto'; // for generating OTP
 
 // Setup CORS middleware
 const cors = Cors({
@@ -29,6 +33,42 @@ function runMiddleware(req, res, fn) {
 
 // Helper to generate JWT
 const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+// Configure email transporter (use environment variables)
+const transporter = nodemailer.createTransport({
+  service: 'gmail', // or your email service
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+// Helper to generate 6-digit OTP
+const generateOTP = () => {
+  return crypto.randomInt(100000, 999999).toString(); // ensures 6 digits
+};
+
+// Helper to send OTP email
+const sendOTPEmail = async (email, otp) => {
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: email,
+    subject: 'Your COZIE Verification Code',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #a855f7;">Welcome to COZIE!</h2>
+        <p>Your verification code is:</p>
+        <h1 style="background: #f3f4f6; padding: 20px; text-align: center; letter-spacing: 5px; font-size: 36px; border-radius: 8px;">${otp}</h1>
+        <p>This code expires in 10 minutes.</p>
+        <p>If you didn't request this, please ignore this email.</p>
+        <br>
+        <p>– The COZIE Team</p>
+      </div>
+    `,
+  };
+  await transporter.sendMail(mailOptions);
+};
+
 
 // =======================
 // Signup user
@@ -63,6 +103,10 @@ export const signupUser = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 12);
     const newUserRef = db.collection("users").doc();
 
+    // Generate OTP and expiry (10 minutes from now)
+    const otp = generateOTP();
+    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
     const newUser = {
       id: newUserRef.id,
       fullname,
@@ -70,16 +114,23 @@ export const signupUser = async (req, res) => {
       email: normalizedEmail,
       password: hashedPassword,
       createdAt: new Date(),
+      isVerified: false,           // user starts unverified
+      otp: {
+        code: otp,                 // store OTP (consider hashing for production)
+        expiresAt: otpExpiresAt,
+      },
     };
 
     await newUserRef.set(newUser);
 
-    const token = generateToken(newUserRef.id);
+    // Send OTP email
+    await sendOTPEmail(normalizedEmail, otp);
 
+    // Return success WITHOUT token (user not verified)
     return res.status(201).json({
       success: true,
-      message: "User registered successfully",
-      token,
+      message: "User registered successfully. Please check your email for verification code.",
+      // Optionally return user info (without token)
       user: { id: newUserRef.id, fullname, username, email: normalizedEmail },
     });
   } catch (err) {
@@ -180,5 +231,6 @@ export const getProfile = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
 
 
