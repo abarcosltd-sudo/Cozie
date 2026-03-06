@@ -289,6 +289,47 @@ export const verifyOTP = async (req, res) => {
 //==========================
 // Save preferences
 //==========================
+export const savePreferences = async (req, res) => {
+  // Only allow POST
+  if (req.method !== "POST") {
+    return res.status(405).json({ success: false, message: "Method not allowed" });
+  }
+
+  try {
+    const { genres } = req.body;
+
+    // Validate input
+    if (!genres || !Array.isArray(genres) || genres.length === 0) {
+      return res.status(400).json({ success: false, message: "Genres array is required" });
+    }
+
+    // `req.user` is attached by the protect middleware
+    // It contains the user data from Firestore (including the `id` field)
+    const userId = req.user.id;
+
+    const userRef = db.collection("users").doc(userId);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    // Update the user document with the selected genres
+    await userRef.update({
+      genres: genres,
+      updatedAt: new Date(),
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Preferences saved successfully",
+    });
+  } catch (error) {
+    console.error("Error saving preferences:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 
 
 
