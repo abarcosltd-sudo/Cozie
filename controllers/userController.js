@@ -1,10 +1,9 @@
-import { db } from "../config/firebase.js";
+import { db, bucket } from "../config/firebase.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import Cors from "cors";
 import nodemailer from 'nodemailer'; // or use your preferred email service
 import crypto from 'crypto'; // for generating OTP
-import { bucket } from "../config/firebase-storage.js"; // you need to set this up
 import fs from "fs";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
@@ -447,4 +446,5 @@ export const updateProfile = async (req, res) => {
     }
   });
 };
+
 
