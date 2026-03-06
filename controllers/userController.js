@@ -227,7 +227,9 @@ export const getProfile = async (req, res) => {
   }
 };
 
-//verify user otp
+//===================
+// Verify user otp
+//===================
 export const verifyOTP = async (req, res) => {
   await runMiddleware(req, res, cors);
   if (req.method !== 'POST') {
@@ -283,6 +285,10 @@ export const verifyOTP = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+//==========================
+// Save preferences
+//==========================
 
 
 
