@@ -4,10 +4,10 @@ import jwt from "jsonwebtoken";
 import Cors from "cors";
 import nodemailer from 'nodemailer'; // or use your preferred email service
 import crypto from 'crypto'; // for generating OTP
-import fs from "fs";
-import path from "path";
-import { v4 as uuidv4 } from "uuid";
-import multer from "multer";
+// import fs from "fs";
+// import path from "path";
+// import { v4 as uuidv4 } from "uuid";
+// import multer from "multer";
 
 // Setup CORS middleware
 const cors = Cors({
@@ -358,93 +358,48 @@ export const getCurrentUser = async (req, res) => {
 //========================
 // Update Profile
 //========================
-// Configure multer storage (temporary on disk)
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(process.cwd(), "uploads");
-    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = uuidv4() + path.extname(file.originalname);
-    cb(null, uniqueName);
-  },
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith("image/")) {
-      cb(null, true);
-    } else {
-      cb(new Error("Only images are allowed"));
-    }
-  },
-}).single("profilePhoto");
-
-// Wrapper to handle multer errors
 export const updateProfile = async (req, res) => {
-  upload(req, res, async (err) => {
-    if (err) {
-      return res.status(400).json({ success: false, message: err.message });
+  try {
+    const userId = req.user.id;
+    const { displayName, username, bio, photoURL, removePhoto } = req.body;
+
+    const userRef = db.collection("users").doc(userId);
+    const userDoc = await userRef.get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    try {
-      const userId = req.user.id;
-      const { displayName, username, bio, removePhoto } = req.body;
-      const file = req.file;
+    const updateData = {};
 
-      const userRef = db.collection("users").doc(userId);
-      const userDoc = await userRef.get();
-      if (!userDoc.exists) {
-        return res.status(404).json({ success: false, message: "User not found" });
+    if (displayName !== undefined) updateData.displayName = displayName;
+
+    // Username uniqueness check
+    if (username !== undefined) {
+      const existing = await db.collection("users").where("username", "==", username).limit(1).get();
+      if (!existing.empty && existing.docs[0].id !== userId) {
+        return res.status(400).json({ success: false, message: "Username already taken" });
       }
-
-      const updateData = {};
-
-      if (displayName) updateData.displayName = displayName;
-
-      // Username uniqueness check
-      if (username) {
-        const existing = await db.collection("users").where("username", "==", username).limit(1).get();
-        if (!existing.empty && existing.docs[0].id !== userId) {
-          return res.status(400).json({ success: false, message: "Username already taken" });
-        }
-        updateData.username = username;
-      }
-
-      if (bio !== undefined) updateData.bio = bio; // allow empty string
-
-      // Handle photo
-      if (removePhoto === 'true') {
-        updateData.photoURL = null;
-      } else if (file) {
-        // Upload to Firebase Storage
-        const destination = `profile_photos/${userId}/${file.filename}`;
-        await bucket.upload(file.path, {
-          destination,
-          metadata: { contentType: file.mimetype },
-        });
-        // Make the file publicly readable (or use signed URL)
-        await bucket.file(destination).makePublic();
-        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
-        updateData.photoURL = publicUrl;
-
-        // Delete temp file
-        fs.unlinkSync(file.path);
-      }
-
-      updateData.updatedAt = new Date();
-
-      await userRef.update(updateData);
-
-      return res.status(200).json({ success: true, message: "Profile updated successfully" });
-    } catch (error) {
-      console.error("Error updating profile:", error);
-      return res.status(500).json({ success: false, message: "Server error" });
+      updateData.username = username;
     }
-  });
+
+    if (bio !== undefined) updateData.bio = bio; // allow empty string
+
+    // Handle photo
+    if (removePhoto === true) {
+      updateData.photoURL = null;
+    } else if (photoURL !== undefined) {
+      // If photoURL is provided, store it (frontend already uploaded to Firebase Storage)
+      updateData.photoURL = photoURL;
+    }
+    // If neither removePhoto nor photoURL is provided, photo remains unchanged
+
+    updateData.updatedAt = new Date();
+
+    await userRef.update(updateData);
+
+    return res.status(200).json({ success: true, message: "Profile updated successfully" });
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
 };
-
-
