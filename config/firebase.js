@@ -15,12 +15,11 @@ const backendServiceAccount = {
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(backendServiceAccount),
-    storageBucket: process.env.FIREBASE_STORAGE_BUCKET, // optional
   });
 }
 
 const db = admin.firestore();
-const bucket = admin.storage().bucket(); // backend storage (may be null if no bucket set)
+//const bucket = admin.storage().bucket(); // backend storage (may be null if no bucket set)
 
 // ----- FRONTEND FIREBASE PROJECT (for signed URLs) -----
 let frontendBucket = null;
@@ -57,4 +56,4 @@ if (process.env.FRONTEND_FIREBASE_SERVICE_ACCOUNT) {
   console.warn("⚠️ FRONTEND_FIREBASE_SERVICE_ACCOUNT not set. Frontend storage not available.");
 }
 
-export { db, bucket, frontendBucket };
+export { db, frontendBucket };
