@@ -12,9 +12,10 @@ router.post("/verify-otp", verifyOTP);
 router.post("/preferences", protect, savePreferences);
 router.get("/me", protect, getCurrentUser);
 router.put("/profile", protect, updateProfile); // multer is inside the controller
-router.post("/generate-upload-URL", protect, generateUploadURL)
+router.post("/generate-upload-url", protect, generateUploadURL)
 
 export default router;
+
 
 
 
