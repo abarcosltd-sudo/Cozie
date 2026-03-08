@@ -1,4 +1,4 @@
-import { db, bucket } from "../config/firebase.js";
+import { db, frontendbucket } from "../config/firebase.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import Cors from "cors";
@@ -445,4 +445,5 @@ export const generateUploadURL = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to generate upload URL' });
   }
 };
+
 
