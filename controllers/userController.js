@@ -403,3 +403,45 @@ export const updateProfile = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+
+//============================
+// Generate upload URL
+//============================
+export const generateUploadURL = async (req, res) => {
+  try {
+    const userId = req.user.id; // from your JWT
+    const { fileName, fileType } = req.body;
+
+    if (!fileName || !fileType) {
+      return res.status(400).json({ success: false, message: 'Missing fileName or fileType' });
+    }
+
+    // Sanitize filename and create a unique path
+    const safeName = fileName.replace(/[^a-zA-Z0-9.]/g, '_');
+    const timestamp = Date.now();
+    const uniqueId = uuidv4().split('-')[0]; // optional short id
+    const blobPath = `profile-photos/${userId}/${timestamp}_${uniqueId}_${safeName}`;
+    const file = frontendBucket.file(blobPath);
+
+    const options = {
+      version: 'v4',
+      action: 'write',
+      expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+      contentType: fileType,
+    };
+
+    const [signedUrl] = await file.getSignedUrl(options);
+    const publicUrl = `https://storage.googleapis.com/${frontendBucket.name}/${blobPath}`;
+
+    res.json({
+      success: true,
+      signedUrl,
+      publicUrl,
+      path: blobPath // optional, for reference
+    });
+  } catch (error) {
+    console.error('Error generating signed URL:', error);
+    res.status(500).json({ success: false, message: 'Failed to generate upload URL' });
+  }
+};
