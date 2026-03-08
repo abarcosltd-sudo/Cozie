@@ -6,7 +6,7 @@ import nodemailer from 'nodemailer'; // or use your preferred email service
 import crypto from 'crypto'; // for generating OTP
 // import fs from "fs";
 // import path from "path";
-// import { v4 as uuidv4 } from "uuid";
+import { v4 as uuidv4 } from "uuid";
 // import multer from "multer";
 
 // Setup CORS middleware
@@ -445,3 +445,4 @@ export const generateUploadURL = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to generate upload URL' });
   }
 };
+
