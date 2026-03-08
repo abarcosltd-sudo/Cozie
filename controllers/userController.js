@@ -180,7 +180,7 @@ export const loginUser = async (req, res) => {
     return res.status(200).json({
       success: true,
       token,
-      user: { id: user.id, fullname: user.fullname, username: user.username, email: user.email },
+      user: { id: user.id, fullname: user.fullname, username: user.username, email: user.email, displayName: user.displayName, photoURL: user.photoURL, bio: user.bio },
     });
   } catch (err) {
     console.error("Login error:", err);
@@ -445,6 +445,7 @@ export const generateUploadURL = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to generate upload URL' });
   }
 };
+
 
 
 
