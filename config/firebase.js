@@ -1,6 +1,5 @@
 // config/firebase.js
 import admin from "firebase-admin";
-import { getStorage } from "firebase-admin/storage";
 
 // ----- BACKEND FIREBASE PROJECT (your main backend) -----
 const backendServiceAccount = {
@@ -12,40 +11,50 @@ const backendServiceAccount = {
   client_id: process.env.FIREBASE_CLIENT_ID,
 };
 
-// Initialize main backend Firebase Admin app
+// Initialize main backend Firebase Admin app (if not already)
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(backendServiceAccount),
-    storageBucket: process.env.FIREBASE_STORAGE_BUCKET, // optional, for backend storage if needed
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET, // optional
   });
 }
 
 const db = admin.firestore();
-const bucket = admin.storage().bucket(); // backend storage bucket (if used)
+const bucket = admin.storage().bucket(); // backend storage (may be null if no bucket set)
 
 // ----- FRONTEND FIREBASE PROJECT (for signed URLs) -----
 let frontendBucket = null;
 
-try {
-  // Parse the frontend service account JSON from environment variable
-  const frontendServiceAccount = JSON.parse(process.env.FRONTEND_FIREBASE_SERVICE_ACCOUNT);
+if (process.env.FRONTEND_FIREBASE_SERVICE_ACCOUNT) {
+  try {
+    const frontendServiceAccount = JSON.parse(process.env.FRONTEND_FIREBASE_SERVICE_ACCOUNT);
 
-  // Initialize a separate Firebase Admin app for the frontend project
-  const frontendApp = admin.initializeApp(
-    {
-      credential: admin.credential.cert(frontendServiceAccount),
-      // Optionally set storage bucket explicitly; if not set, will use default <project_id>.appspot.com
-      storageBucket: process.env.FRONTEND_STORAGE_BUCKET, // e.g., "coozie-db.firebasestorage.app"
-    },
-    "frontend" // Give it a name to distinguish from the default app
-  );
+    // Determine bucket name: use env var or fallback to <project_id>.appspot.com
+    const frontendBucketName = process.env.FRONTEND_STORAGE_BUCKET || 
+                               `${frontendServiceAccount.project_id}.appspot.com`;
 
-  // Get the bucket for the frontend project
-  frontendBucket = admin.storage(frontendApp).bucket(process.env.FRONTEND_STORAGE_BUCKET);
-  console.log("Frontend Firebase Storage initialized successfully");
-} catch (error) {
-  console.error("Failed to initialize frontend Firebase project:", error.message);
-  // Optionally throw if this is critical; otherwise, frontendBucket remains null
+    if (!frontendBucketName) {
+      throw new Error('Could not determine frontend storage bucket name.');
+    }
+
+    // Initialize a separate Firebase Admin app for the frontend project
+    const frontendApp = admin.initializeApp(
+      {
+        credential: admin.credential.cert(frontendServiceAccount),
+        storageBucket: frontendBucketName,
+      },
+      "frontend" // unique name to avoid conflict with default app
+    );
+
+    // Get the bucket
+    frontendBucket = admin.storage(frontendApp).bucket(frontendBucketName);
+    console.log(`Frontend Firebase Storage initialized with bucket: ${frontendBucketName}`);
+  } catch (error) {
+    console.error("Failed to initialize frontend Firebase project:", error.message);
+    // frontendBucket remains null – endpoints must handle this gracefully
+  }
+} else {
+  console.warn("⚠️ FRONTEND_FIREBASE_SERVICE_ACCOUNT not set. Frontend storage not available.");
 }
 
 export { db, bucket, frontendBucket };
