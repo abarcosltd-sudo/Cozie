@@ -50,45 +50,9 @@ async function authenticate(req, res) {
   }
 }
 
-// CREATE
-export const createMusicPost = async (req, res, next) => {
-  await runMiddleware(req, res, cors);
-
-  const user = await authenticate(req, res);
-  if (!user) return;
-
-  try {
-    const newPost = await MusicPost.create({
-      ...req.body,
-      userId: user.id
-    });
-
-    res.status(201).json({
-      success: true,
-      data: newPost
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// READ
-export const getMusicPosts = async (req, res, next) => {
-  await runMiddleware(req, res, cors);
-
-  const user = await authenticate(req, res);
-  if (!user) return;
-
-  try {
-    const posts = await MusicPost.getByGenres(req.user.selectedGenres);
-
-    res.json(posts);
-  } catch (error) {
-    next(error);
-  }
-};
-
-// SHARE MUSIC POST (new endpoint)
+//======================================
+// Share music
+//======================================
 export const shareMusicPost = async (req, res, next) => {
   await runMiddleware(req, res, cors);
 
@@ -129,16 +93,21 @@ export const shareMusicPost = async (req, res, next) => {
       type: "music_share", // optional: for filtering in feed
     };
 
-    // Create the post using the MusicPost model (assumes a create method)
-    const newPost = await MusicPost.create(postData);
+    // Save directly to Firestore in a "musicPosts" collection
+    const postRef = await db.collection("musicPosts").add(postData);
 
     return res.status(201).json({
       success: true,
       message: "Music shared successfully",
-      postId: newPost.id,
+      postId: postRef.id,
     });
   } catch (error) {
     console.error("Error sharing music post:", error);
-    next(error); // or return 500
+    // Use next(error) if you have error-handling middleware, else return 500
+    if (next) {
+      next(error);
+    } else {
+      return res.status(500).json({ success: false, message: "Server error" });
+    }
   }
 };
