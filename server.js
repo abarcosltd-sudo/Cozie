@@ -6,6 +6,7 @@ import nodemailer from 'nodemailer'; // or use your preferred email service
 // dotenv.config();
 
 import userRoutes from "./routes/userRoutes.js";
+import musicRoutes from "./routes/musicRoutes.js";
 import errorHandler from "./middleware/errorHandler.js";
 
 const app = express();
