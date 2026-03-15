@@ -241,6 +241,10 @@ export const addMusic = async (req, res) => {
   }
 };
 
+
+// -------------------------------------------------------------------
+// 4. Search music metadata to Firestore
+// -------------------------------------------------------------------
 export const searchMusic = async (req, res) => {
   await runMiddleware(req, res, cors);
 
