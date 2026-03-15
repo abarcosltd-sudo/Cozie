@@ -41,6 +41,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use("/api/users", userRoutes);
+app.use("/api/music", musicRoutes);
 
 app.get("/api/home", (req, res) => {
   res.json({
