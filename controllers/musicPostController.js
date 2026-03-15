@@ -14,7 +14,7 @@ function runMiddleware(req, res, fn) {
   });
 }
 
-// CORS configuration (same as before)
+// CORS configuration
 const cors = Cors({
   origin: function (origin, callback) {
     if (!origin || origin.includes("vercel.app") || origin.includes("localhost")) {
@@ -33,7 +33,6 @@ const JWT_SECRET = process.env.JWT_SECRET;
 
 /**
  * Middleware to verify JWT and attach user to request.
- * For serverless, we call it inside each endpoint.
  */
 async function authenticate(req, res) {
   const authHeader = req.headers.authorization;
@@ -53,12 +52,16 @@ async function authenticate(req, res) {
 }
 
 // CREATE
-export const createMusicPost = async (req, res) => {
-  await runMiddleWare(req, res, cors);
+export const createMusicPost = async (req, res, next) => {
+  await runMiddleware(req, res, cors);
+
+  const user = await authenticate(req, res);
+  if (!user) return;
+
   try {
     const newPost = await MusicPost.create({
       ...req.body,
-      userId: req.user.id
+      userId: user.id
     });
 
     res.status(201).json({
@@ -71,12 +74,14 @@ export const createMusicPost = async (req, res) => {
 };
 
 // READ
-export const getMusicPosts = async (req, res) => {
-  await runMiddleWare(req, res, cors);
+export const getMusicPosts = async (req, res, next) => {
+  await runMiddleware(req, res, cors);
+
+  const user = await authenticate(req, res);
+  if (!user) return;
+
   try {
-    const posts = await MusicPost.getByGenres(
-      req.user.selectedGenres
-    );
+    const posts = await MusicPost.getByGenres(req.user.selectedGenres);
 
     res.json(posts);
   } catch (error) {
@@ -84,6 +89,57 @@ export const getMusicPosts = async (req, res) => {
   }
 };
 
-export const shareMusicPost = async (req, res) => {
-  await runMiddleWare(req, res, cors);
-}
+// SHARE MUSIC POST (new endpoint)
+export const shareMusicPost = async (req, res, next) => {
+  await runMiddleware(req, res, cors);
+
+  const user = await authenticate(req, res);
+  if (!user) return;
+
+  try {
+    const { songId, caption, platforms } = req.body;
+
+    // Validate required fields
+    if (!songId) {
+      return res.status(400).json({ success: false, message: "songId is required" });
+    }
+    if (!platforms || !Array.isArray(platforms) || platforms.length === 0) {
+      return res.status(400).json({ success: false, message: "platforms array with at least one platform is required" });
+    }
+
+    // Verify the song exists in the music collection
+    const songDoc = await db.collection("music").doc(songId).get();
+    if (!songDoc.exists) {
+      return res.status(404).json({ success: false, message: "Song not found" });
+    }
+    const songData = { id: songDoc.id, ...songDoc.data() };
+
+    // Build post data
+    const postData = {
+      userId: user.id,
+      songId,
+      caption: caption || "",
+      platforms,
+      songSnapshot: {
+        title: songData.title,
+        artist: songData.artist,
+        albumArtUrl: songData.albumArtUrl || null,
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      type: "music_share", // optional: for filtering in feed
+    };
+
+    // Create the post using the MusicPost model (assumes a create method)
+    const newPost = await MusicPost.create(postData);
+
+    return res.status(201).json({
+      success: true,
+      message: "Music shared successfully",
+      postId: newPost.id,
+    });
+  } catch (error) {
+    console.error("Error sharing music post:", error);
+    next(error); // or return 500
+  }
+};
