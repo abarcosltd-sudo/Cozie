@@ -6,5 +6,6 @@ import { protect } from "../middleware/authMiddleware.js";
 const router = express.Router();
 
 router.post("/share-music", protect, shareMusicPost);
+router.get("/feed", musicPosts);
 
 export default router;
