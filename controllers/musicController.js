@@ -240,3 +240,7 @@ export const addMusic = async (req, res) => {
     return res.status(500).json({ success: false, message: "Failed to save music metadata" });
   }
 };
+
+export const searchMusic = async (req, res) => {
+  await runMiddleware(req, res, cors);  
+}
