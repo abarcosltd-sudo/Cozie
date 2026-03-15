@@ -309,3 +309,60 @@ export const searchMusic = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Search failed' });
   }
 };
+
+//======================================================
+// GET – new releases (most recent)
+//======================================================
+export const getTrendingMusic = async (req, res, next) => {
+  await runMiddleware(req, res, cors);
+  try {
+    const snapshot = await db.collection('music')
+      .orderBy('createdAt', 'desc')
+      .limit(10)
+      .get();
+
+    const trending = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        title: data.title || 'Untitled',
+        artist: data.artist || 'Unknown Artist',
+        albumArtUrl: data.albumArtUrl || null,
+      };
+    });
+
+    res.json({ success: true, trending });
+  } catch (error) {
+    console.error('Error fetching trending music:', error);
+    next(error);
+  }
+};
+
+//=======================================================================
+// GET most liked (requires likeCount field on music)
+//=======================================================================
+export const getTopCharts = async (req, res, next) => {
+  await runMiddleware(req, res, cors);
+  try {
+    const snapshot = await db.collection('music')
+      .orderBy('likeCount', 'desc')
+      .limit(10)
+      .get();
+
+    const charts = snapshot.docs.map((doc, index) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        number: index + 1,
+        title: data.title || 'Untitled',
+        artist: data.artist || 'Unknown Artist',
+        albumArtUrl: data.albumArtUrl || null,
+      };
+    });
+
+    res.json({ success: true, charts });
+  } catch (error) {
+    console.error('Error fetching top charts:', error);
+    next(error);
+  }
+};
