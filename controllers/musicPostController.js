@@ -171,7 +171,7 @@ export const getMusicPosts = async (req, res, next) => {
       posts.push({
         id: doc.id,
         userName: userData.fullname || userData.displayName || 'User',
-        createdAt: postData.createdAt,
+        createdAt: postData.createdAt ? postData.createdAt.toDate().toISOString() : new Date().toISOString(),
         songSnapshot: postData.songSnapshot || {
           title: 'Untitled',
           artist: 'Unknown Artist',
