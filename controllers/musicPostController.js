@@ -2,6 +2,7 @@ import { db, frontendBucket } from "../config/firebase.js";
 import jwt from "jsonwebtoken";
 import Cors from "cors";
 import { v4 as uuidv4 } from "uuid";
+import { FieldValue } from 'firebase-admin/firestore'
 
 // Helper to run CORS middleware
 function runMiddleware(req, res, fn) {
@@ -235,21 +236,6 @@ export const likePost = async (req, res, next) => {
       likeCountChange = 1;
     }
 
-    // Optionally update a denormalized likeCount field on the post document
-    // (if you decide to maintain it for efficient counting)
-    // await postRef.update({
-    //   likeCount: admin.firestore.FieldValue.increment(likeCountChange)
-    // });
-
-    // For now, we'll just return the new like status.
-    // To get the updated like count, we could either:
-    // - Read it from the subcollection (costly) or
-    // - Use the field above and return it.
-    // We'll keep it simple: return only the new status.
-    // If you want the count, you can query it after update or return it from here.
-
-    // For a complete response, you might want to return the new like count.
-    // Let's fetch the updated count using an aggregation (Firestore count()).
     const likesSnapshot = await postRef.collection('likes').count().get();
     const likeCount = likesSnapshot.data().count;
 
@@ -261,6 +247,60 @@ export const likePost = async (req, res, next) => {
     });
   } catch (error) {
     console.error('Error toggling like:', error);
+    next(error);
+  }
+};
+
+//===============================
+// Add comment
+//===============================
+export const addComment = async (req, res, next) => {
+  await runMiddleware(req, res, cors);
+  const user = await authenticate(req, res);
+  if (!user) return;
+
+  const { postId } = req.params;
+  const { text } = req.body;
+  if (!text || text.trim() === '') {
+    return res.status(400).json({ success: false, message: 'Comment text is required' });
+  }
+
+  try {
+    const postRef = db.collection('musicPosts').doc(postId);
+    const postDoc = await postRef.get();
+    if (!postDoc.exists) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    // Fetch user's name (optional, for denormalization)
+    const userDoc = await db.collection('users').doc(user.id).get();
+    const userName = userDoc.exists ? (userDoc.data().fullname || userDoc.data().displayName || 'User') : 'User';
+
+    // Add comment to subcollection
+    const commentRef = postRef.collection('comments').doc();
+    await commentRef.set({
+      userId: user.id,
+      userName: userName,
+      text: text.trim(),
+      createdAt: new Date(),
+    });
+
+    // Increment comment count on the post
+    await postRef.update({
+      commentCount: FieldValue.increment(1)
+    });
+
+    // Get the updated comment count
+    const newCountSnapshot = await postRef.collection('comments').count().get();
+    const newCount = newCountSnapshot.data().count;
+
+    return res.status(201).json({
+      success: true,
+      commentId: commentRef.id,
+      commentCount: newCount
+    });
+  } catch (error) {
+    console.error('Error adding comment:', error);
     next(error);
   }
 };
