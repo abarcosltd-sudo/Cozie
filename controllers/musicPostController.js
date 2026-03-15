@@ -111,3 +111,81 @@ export const shareMusicPost = async (req, res, next) => {
     }
   }
 };
+
+
+//================================
+// Get posts
+//================================
+export const getMusicPosts = async (req, res, next) => {
+  await runMiddleware(req, res, cors);
+
+  const user = await authenticate(req, res);
+  if (!user) return;
+
+  try {
+    // Fetch music posts, newest first
+    const postsSnapshot = await db
+      .collection('musicPosts')
+      .orderBy('createdAt', 'desc')
+      .limit(50) // pagination can be added later
+      .get();
+
+    const posts = [];
+
+    for (const doc of postsSnapshot.docs) {
+      const postData = doc.data();
+
+      // Get user info
+      const userDoc = await db.collection('users').doc(postData.userId).get();
+      const userData = userDoc.exists
+        ? userDoc.data()
+        : { fullname: 'Unknown User', displayName: 'User' };
+
+      // Check if current user liked this post
+      const likeDoc = await db
+        .collection('musicPosts')
+        .doc(doc.id)
+        .collection('likes')
+        .doc(user.id)
+        .get();
+      const likedByUser = likeDoc.exists;
+
+      // Count likes (could be cached as a field for efficiency)
+      const likesSnapshot = await db
+        .collection('musicPosts')
+        .doc(doc.id)
+        .collection('likes')
+        .count()
+        .get();
+      const likesCount = likesSnapshot.data().count;
+
+      // Count comments (assuming a 'comments' subcollection)
+      const commentsSnapshot = await db
+        .collection('musicPosts')
+        .doc(doc.id)
+        .collection('comments')
+        .count()
+        .get();
+      const commentsCount = commentsSnapshot.data().count;
+
+      posts.push({
+        id: doc.id,
+        userName: userData.fullname || userData.displayName || 'User',
+        createdAt: postData.createdAt,
+        songSnapshot: postData.songSnapshot || {
+          title: 'Untitled',
+          artist: 'Unknown Artist',
+          albumArtUrl: null,
+        },
+        likes: likesCount,
+        comments: commentsCount,
+        likedByUser,
+      });
+    }
+
+    return res.status(200).json({ success: true, posts });
+  } catch (error) {
+    console.error('Error fetching music posts:', error);
+    next(error);
+  }
+};
