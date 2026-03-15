@@ -36,30 +36,27 @@ function runMiddleware(req, res, fn) {
 // Helper to generate JWT
 const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
-// Configure transporter once (outside the handler)
-let transporter;
-try {
-  transporter = nodemailer.createTransport({
-    service: 'gmail',
+const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
+
+const sendOtpEmail = async (email, otp) => {
+  const transporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST,
+    port: process.env.EMAIL_PORT,
+    secure: process.env.EMAIL_PORT === '465', // true for 465, false for other ports
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
   });
-} catch (err) {
-  console.error('Failed to create email transporter:', err);
-}
 
-const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
-
-const sendOTPEmail = async (email, otp) => {
-  if (!transporter) throw new Error('Email transporter not configured');
   const mailOptions = {
-    from: process.env.EMAIL_USER,
+    from: process.env.EMAIL_FROM,
     to: email,
-    subject: 'Your COZIE Verification Code',
-    html: `<h1>${otp}</h1><p>Enter this code to verify your email.</p>`,
+    subject: 'Your Coozie Verification Code',
+    text: `Your verification code is: ${otp}`,
+    html: `<p>Your verification code is: <strong>${otp}</strong></p>`,
   };
+
   await transporter.sendMail(mailOptions);
 };
 
