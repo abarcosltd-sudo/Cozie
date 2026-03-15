@@ -7,7 +7,7 @@ import nodemailer from 'nodemailer'; // or use your preferred email service
 
 import userRoutes from "./routes/userRoutes.js";
 import musicRoutes from "./routes/musicRoutes.js";
-import postRoutes from "./routes/postMusicRoutes.js";
+import postRoutes from "./routes/postRoutes.js";
 import errorHandler from "./middleware/errorHandler.js";
 
 const app = express();
@@ -44,7 +44,7 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use("/api/users", userRoutes);
 app.use("/api/music", musicRoutes);
-app.use("/api/posts", postMusicRoutes);
+app.use("/api/posts", postRoutes);
 
 app.get("/api/home", (req, res) => {
   res.json({
