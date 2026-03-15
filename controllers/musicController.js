@@ -3,7 +3,17 @@ import jwt from "jsonwebtoken";
 import Cors from "cors";
 import { v4 as uuidv4 } from "uuid";
 
-// Setup CORS middleware
+// Helper to run CORS middleware
+function runMiddleware(req, res, fn) {
+  return new Promise((resolve, reject) => {
+    fn(req, res, (result) => {
+      if (result instanceof Error) return reject(result);
+      return resolve(result);
+    });
+  });
+}
+
+// CORS configuration (same as before)
 const cors = Cors({
   origin: function (origin, callback) {
     if (!origin || origin.includes("vercel.app") || origin.includes("localhost")) {
@@ -17,24 +27,216 @@ const cors = Cors({
   credentials: true,
 });
 
-// Helper to run middleware in serverless
-function runMiddleware(req, res, fn) {
-  return new Promise((resolve, reject) => {
-    fn(req, res, (result) => {
-      if (result instanceof Error) return reject(result);
-      return resolve(result);
-    });
-  });
+// JWT secret from environment
+const JWT_SECRET = process.env.JWT_SECRET;
+
+/**
+ * Middleware to verify JWT and attach user to request.
+ * For serverless, we call it inside each endpoint.
+ */
+async function authenticate(req, res) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    res.status(401).json({ success: false, message: "No token provided" });
+    return null;
+  }
+  const token = authHeader.split(" ")[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded; // contains id, etc.
+    return req.user;
+  } catch (error) {
+    res.status(401).json({ success: false, message: "Invalid or expired token" });
+    return null;
+  }
 }
 
+// -------------------------------------------------------------------
+// 1. Generate signed URL for audio file upload
+// -------------------------------------------------------------------
 export const generateUploadURL = async (req, res) => {
   await runMiddleware(req, res, cors);
-} 
 
+  // Authenticate
+  const user = await authenticate(req, res);
+  if (!user) return; // response already sent
+
+  try {
+    const { fileName, fileType } = req.body;
+    if (!fileName || !fileType) {
+      return res.status(400).json({ success: false, message: "fileName and fileType are required" });
+    }
+
+    // Validate file type (optional – restrict to audio)
+    if (!fileType.startsWith("audio/")) {
+      return res.status(400).json({ success: false, message: "Only audio files are allowed" });
+    }
+
+    // Sanitize filename and create unique path
+    const safeName = fileName.replace(/[^a-zA-Z0-9.]/g, "_");
+    const timestamp = Date.now();
+    const uniqueId = uuidv4().split("-")[0];
+    const blobPath = `music/${user.id}/${timestamp}_${uniqueId}_${safeName}`;
+    const file = frontendBucket.file(blobPath);
+
+    const options = {
+      version: "v4",
+      action: "write",
+      expires: Date.now() + 30 * 60 * 1000, // 30 minutes
+      contentType: fileType,
+    };
+
+    const [signedUrl] = await file.getSignedUrl(options);
+    const publicUrl = `https://storage.googleapis.com/${frontendBucket.name}/${blobPath}`;
+
+    return res.status(200).json({
+      success: true,
+      signedUrl,
+      publicUrl,
+    });
+  } catch (error) {
+    console.error("Error generating audio upload URL:", error);
+    return res.status(500).json({ success: false, message: "Failed to generate upload URL" });
+  }
+};
+
+// -------------------------------------------------------------------
+// 2. Generate signed URL for album art upload
+// -------------------------------------------------------------------
 export const generateAlbumArtURL = async (req, res) => {
   await runMiddleware(req, res, cors);
-}
 
+  const user = await authenticate(req, res);
+  if (!user) return;
+
+  try {
+    const { fileName, fileType } = req.body;
+    if (!fileName || !fileType) {
+      return res.status(400).json({ success: false, message: "fileName and fileType are required" });
+    }
+
+    // Optional: restrict to images
+    if (!fileType.startsWith("image/")) {
+      return res.status(400).json({ success: false, message: "Only image files are allowed for album art" });
+    }
+
+    const safeName = fileName.replace(/[^a-zA-Z0-9.]/g, "_");
+    const timestamp = Date.now();
+    const uniqueId = uuidv4().split("-")[0];
+    const blobPath = `album-art/${user.id}/${timestamp}_${uniqueId}_${safeName}`;
+    const file = frontendBucket.file(blobPath);
+
+    const options = {
+      version: "v4",
+      action: "write",
+      expires: Date.now() + 30 * 60 * 1000, // 30 minutes
+      contentType: fileType,
+    };
+
+    const [signedUrl] = await file.getSignedUrl(options);
+    const publicUrl = `https://storage.googleapis.com/${frontendBucket.name}/${blobPath}`;
+
+    return res.status(200).json({
+      success: true,
+      signedUrl,
+      publicUrl,
+    });
+  } catch (error) {
+    console.error("Error generating album art URL:", error);
+    return res.status(500).json({ success: false, message: "Failed to generate upload URL" });
+  }
+};
+
+// -------------------------------------------------------------------
+// 3. Save music metadata to Firestore
+// -------------------------------------------------------------------
 export const addMusic = async (req, res) => {
   await runMiddleware(req, res, cors);
-}
+
+  const user = await authenticate(req, res);
+  if (!user) return;
+
+  try {
+    const {
+      fileUrl,
+      albumArtUrl = null,
+      title,
+      artist,
+      featuredArtists = "",
+      album,
+      genre = null,
+      subgenre = "",
+      mood = "",
+      producer = "",
+      songwriter = "",
+      composer = "",
+      recordLabel = "",
+      releaseDate = "",
+      releaseYear = "",
+      country = "",
+      language = "",
+      duration = "",
+      bpm = "",
+      musicalKey = "",
+      isrc = "",
+      explicit = "",
+      copyright = "",
+      publishingRights = "",
+      originalWork = false,
+      description = "",
+      lyrics = "",
+      tags = "",
+    } = req.body;
+
+    // Basic validation
+    if (!fileUrl || !title || !artist || !album) {
+      return res.status(400).json({ success: false, message: "Missing required fields: fileUrl, title, artist, album" });
+    }
+
+    // Create music document in Firestore (using your Music model or direct collection)
+    const musicData = {
+      userId: user.id,
+      fileUrl,
+      albumArtUrl,
+      title,
+      artist,
+      featuredArtists,
+      album,
+      genre,
+      subgenre,
+      mood,
+      producer,
+      songwriter,
+      composer,
+      recordLabel,
+      releaseDate,
+      releaseYear,
+      country,
+      language,
+      duration,
+      bpm,
+      musicalKey,
+      isrc,
+      explicit,
+      copyright,
+      publishingRights,
+      originalWork,
+      description,
+      lyrics,
+      tags,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const docRef = await db.collection("music").add(musicData);
+
+    return res.status(201).json({
+      success: true,
+      message: "Music added successfully",
+      musicId: docRef.id,
+    });
+  } catch (error) {
+    console.error("Error saving music metadata:", error);
+    return res.status(500).json({ success: false, message: "Failed to save music metadata" });
+  }
+};
