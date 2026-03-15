@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.post("/share-music", protect, shareMusicPost);
 router.get("/feed", getMusicPosts);
-router.post('/:postId/like', likePost);
-router.post('/:postId/comments', addComment);
+router.post("/:postId/like", likePost);
+router.post("/:postId/comments", addComment);
 
 export default router;
