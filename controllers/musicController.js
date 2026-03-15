@@ -27,3 +27,14 @@ function runMiddleware(req, res, fn) {
   });
 }
 
+export const generateUploadURL = async (req, res) => {
+  await runMiddleware(req, res, cors);
+} 
+
+export const generateAlbumArtURL = async (req, res) => {
+  await runMiddleware(req, res, cors);
+}
+
+export const addMusic = async (req, res) => {
+  await runMiddleware(req, res, cors);
+}
