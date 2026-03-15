@@ -1,6 +1,6 @@
-const db = require("../config/firebase");
+import { db } from "../config/firebase";
 
-class MusicPost {
+export class MusicPost {
   static collection() {
     return db.collection("musicPosts");
   }
@@ -45,4 +45,3 @@ class MusicPost {
   }
 }
 
-module.exports = MusicPost;
