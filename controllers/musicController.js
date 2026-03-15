@@ -242,5 +242,66 @@ export const addMusic = async (req, res) => {
 };
 
 export const searchMusic = async (req, res) => {
-  await runMiddleware(req, res, cors);  
-}
+  await runMiddleware(req, res, cors);
+
+  // Authenticate user (optional – you can remove if public search is desired)
+  const user = await authenticate(req, res);
+  if (!user) return;
+
+  try {
+    const query = req.query.q;
+    if (!query || query.trim() === '') {
+      return res.status(200).json({ songs: [] });
+    }
+
+    const searchTerm = query.trim();
+    // Create upper bound for prefix search (Firestore trick)
+    const end = searchTerm.replace(/.$/, c => String.fromCharCode(c.charCodeAt(0) + 1));
+
+    // Search by title
+    const titleQuery = db
+      .collection('music')
+      .where('title', '>=', searchTerm)
+      .where('title', '<', end)
+      .limit(20);
+
+    // Search by artist
+    const artistQuery = db
+      .collection('music')
+      .where('artist', '>=', searchTerm)
+      .where('artist', '<', end)
+      .limit(20);
+
+    // Execute both queries in parallel
+    const [titleSnapshot, artistSnapshot] = await Promise.all([
+      titleQuery.get(),
+      artistQuery.get(),
+    ]);
+
+    // Merge results, using a Map to deduplicate by document ID
+    const songsMap = new Map();
+
+    titleSnapshot.docs.forEach(doc => {
+      songsMap.set(doc.id, { id: doc.id, ...doc.data() });
+    });
+
+    artistSnapshot.docs.forEach(doc => {
+      if (!songsMap.has(doc.id)) {
+        songsMap.set(doc.id, { id: doc.id, ...doc.data() });
+      }
+    });
+
+    // Convert map values to array and format response
+    const songs = Array.from(songsMap.values()).map(doc => ({
+      id: doc.id,
+      title: doc.title || '',
+      artist: doc.artist || '',
+      albumArtUrl: doc.albumArtUrl || null, // if stored
+    }));
+
+    return res.status(200).json({ songs });
+  } catch (error) {
+    console.error('Error searching music:', error);
+    return res.status(500).json({ success: false, message: 'Search failed' });
+  }
+};
