@@ -207,14 +207,12 @@ export const likePost = async (req, res, next) => {
   const { postId } = req.params;
 
   try {
-    // Check if the post exists
     const postRef = db.collection('musicPosts').doc(postId);
     const postDoc = await postRef.get();
     if (!postDoc.exists) {
       return res.status(404).json({ success: false, message: 'Post not found' });
     }
 
-    // Reference to the user's like document in the post's likes subcollection
     const likeRef = postRef.collection('likes').doc(user.id);
     const likeDoc = await likeRef.get();
 
@@ -222,22 +220,26 @@ export const likePost = async (req, res, next) => {
     let likeCountChange = 0;
 
     if (likeDoc.exists) {
-      // Unlike: delete the like document
       await likeRef.delete();
       liked = false;
       likeCountChange = -1;
     } else {
-      // Like: create a like document with timestamp
-      await likeRef.set({
-        userId: user.id,
-        createdAt: new Date(),
-      });
+      await likeRef.set({ userId: user.id, createdAt: new Date() });
       liked = true;
       likeCountChange = 1;
     }
 
     const likesSnapshot = await postRef.collection('likes').count().get();
     const likeCount = likesSnapshot.data().count;
+
+    // Update the likeCount on the corresponding music document
+    const postData = postDoc.data();
+    if (postData.songId) {
+      const musicRef = db.collection('music').doc(postData.songId);
+      await musicRef.update({
+        likeCount: FieldValue.increment(likeCountChange),
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -250,7 +252,6 @@ export const likePost = async (req, res, next) => {
     next(error);
   }
 };
-
 //===============================
 // Add comment
 //===============================
