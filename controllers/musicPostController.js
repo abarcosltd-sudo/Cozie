@@ -140,7 +140,9 @@ export const getMusicPosts = async (req, res, next) => {
       const userData = userDoc.exists
         ? userDoc.data()
         : { fullname: 'Unknown User', displayName: 'User' };
-
+      
+      const userAvatarUrl = userData.photoURL || null;
+      
       // Check if current user liked this post
       const likeDoc = await db
         .collection('musicPosts')
@@ -171,6 +173,7 @@ export const getMusicPosts = async (req, res, next) => {
       posts.push({
         id: doc.id,
         userName: userData.fullname || userData.displayName || 'User',
+        userAvatarUrl: userAvatarUrl,
         createdAt: postData.createdAt ? postData.createdAt.toDate().toISOString() : new Date().toISOString(),
         songSnapshot: postData.songSnapshot || {
           title: 'Untitled',
