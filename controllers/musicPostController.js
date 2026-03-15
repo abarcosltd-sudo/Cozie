@@ -189,3 +189,74 @@ export const getMusicPosts = async (req, res, next) => {
     next(error);
   }
 };
+
+//============================
+// Like Post
+//============================
+export const likePost = async (req, res, next) => {
+  await runMiddleware(req, res, cors);
+
+  const user = await authenticate(req, res);
+  if (!user) return;
+
+  const { postId } = req.params;
+
+  try {
+    // Check if the post exists
+    const postRef = db.collection('musicPosts').doc(postId);
+    const postDoc = await postRef.get();
+    if (!postDoc.exists) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    // Reference to the user's like document in the post's likes subcollection
+    const likeRef = postRef.collection('likes').doc(user.id);
+    const likeDoc = await likeRef.get();
+
+    let liked;
+    let likeCountChange = 0;
+
+    if (likeDoc.exists) {
+      // Unlike: delete the like document
+      await likeRef.delete();
+      liked = false;
+      likeCountChange = -1;
+    } else {
+      // Like: create a like document with timestamp
+      await likeRef.set({
+        userId: user.id,
+        createdAt: new Date(),
+      });
+      liked = true;
+      likeCountChange = 1;
+    }
+
+    // Optionally update a denormalized likeCount field on the post document
+    // (if you decide to maintain it for efficient counting)
+    // await postRef.update({
+    //   likeCount: admin.firestore.FieldValue.increment(likeCountChange)
+    // });
+
+    // For now, we'll just return the new like status.
+    // To get the updated like count, we could either:
+    // - Read it from the subcollection (costly) or
+    // - Use the field above and return it.
+    // We'll keep it simple: return only the new status.
+    // If you want the count, you can query it after update or return it from here.
+
+    // For a complete response, you might want to return the new like count.
+    // Let's fetch the updated count using an aggregation (Firestore count()).
+    const likesSnapshot = await postRef.collection('likes').count().get();
+    const likeCount = likesSnapshot.data().count;
+
+    return res.status(200).json({
+      success: true,
+      liked,
+      likeCount,
+      message: liked ? 'Post liked' : 'Post unliked',
+    });
+  } catch (error) {
+    console.error('Error toggling like:', error);
+    next(error);
+  }
+};
