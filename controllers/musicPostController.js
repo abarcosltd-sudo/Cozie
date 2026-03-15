@@ -1,4 +1,4 @@
-const MusicPost = require("../models/MusicPost");
+import { MusicPost } from "../models/MusicPost";
 import { db, frontendBucket } from "../config/firebase.js";
 import jwt from "jsonwebtoken";
 import Cors from "cors";
