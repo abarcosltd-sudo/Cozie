@@ -188,6 +188,11 @@ export const getMusicPosts = async (req, res, next) => {
       });
     }
 
+    // Set headers to prevent caching
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     return res.status(200).json({ success: true, posts });
   } catch (error) {
     console.error('Error fetching music posts:', error);
