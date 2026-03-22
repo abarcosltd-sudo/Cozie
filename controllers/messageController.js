@@ -333,3 +333,41 @@ export const deleteMessage = async (req, res, next) => {
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+//=========================================================
+// GET /api/users/available
+// Get all users except current user (for new conversation)
+//=========================================================
+export const getAvailableUsers = async (req, res, next) => {
+  await runMiddleware(req, res, cors);
+
+  const user = await authenticate(req, res);
+  if (!user) return;
+
+  try {
+    const usersSnapshot = await db.collection('users').get();
+    
+    const availableUsers = [];
+    for (const doc of usersSnapshot.docs) {
+      const userData = doc.data();
+      if (doc.id !== user.id) {
+        availableUsers.push({
+          id: doc.id,
+          name: userData.fullname || userData.displayName || userData.username || 'User',
+          username: userData.username,
+          email: userData.email,
+          photoURL: userData.photoURL || null,
+          isOnline: userData.isOnline || false
+        });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      users: availableUsers
+    });
+  } catch (error) {
+    console.error('Error fetching available users:', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
