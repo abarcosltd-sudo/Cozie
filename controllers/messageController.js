@@ -109,25 +109,102 @@ export const getMessages = async (req, res, next) => {
   await runMiddleware(req, res, cors);
 
   const user = await authenticate(req, res);
-  if (!user) return;
+  if (!user) return; // authenticate already sent response
 
   const { conversationId } = req.params;
 
+  // Validate conversationId
+  if (!conversationId || conversationId === 'undefined' || conversationId === 'null') {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Invalid conversation ID' 
+    });
+  }
+
   try {
+    // Check if the conversation exists
+    const conversationRef = db.collection('conversations').doc(conversationId);
+    const conversationDoc = await conversationRef.get();
+    
+    if (!conversationDoc.exists) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Conversation not found' 
+      });
+    }
+
+    // Verify user is part of this conversation
+    const conversationData = conversationDoc.data();
+    const participants = conversationData?.participants || [];
+    
+    if (!participants.includes(user.id)) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'You do not have access to this conversation' 
+      });
+    }
+
+    // Fetch messages
     const messagesSnapshot = await db
       .collection('conversations')
       .doc(conversationId)
       .collection('messages')
       .orderBy('timestamp', 'asc')
+      .limit(100) // Limit to prevent large responses
       .get();
 
-    const messages = messagesSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      timestamp: doc.data().timestamp?.toDate()?.toISOString()
-    }));
+    const messages = [];
+    
+    for (const doc of messagesSnapshot.docs) {
+      const msgData = doc.data();
+      
+      // Safely handle timestamp
+      let timestampISO = new Date().toISOString();
+      if (msgData.timestamp) {
+        if (typeof msgData.timestamp.toDate === 'function') {
+          timestampISO = msgData.timestamp.toDate().toISOString();
+        } else if (msgData.timestamp.seconds) {
+          timestampISO = new Date(msgData.timestamp.seconds * 1000).toISOString();
+        } else if (msgData.timestamp.toISOString) {
+          timestampISO = msgData.timestamp.toISOString();
+        } else if (typeof msgData.timestamp === 'string') {
+          timestampISO = msgData.timestamp;
+        }
+      }
+      
+      messages.push({
+        id: doc.id,
+        text: msgData.text || '',
+        senderId: msgData.senderId,
+        receiverId: msgData.receiverId,
+        timestamp: timestampISO,
+        isMusic: msgData.isMusic || false,
+        musicTitle: msgData.musicTitle || null,
+        musicArtist: msgData.musicArtist || null,
+        musicUrl: msgData.musicUrl || null,
+        read: msgData.read || false
+      });
+    }
 
-    // Mark messages as read
+    // Mark messages as read for the current user
+    const unreadMessagesQuery = await db
+      .collection('conversations')
+      .doc(conversationId)
+      .collection('messages')
+      .where('receiverId', '==', user.id)
+      .where('read', '==', false)
+      .get();
+
+    const batch = db.batch();
+    unreadMessagesQuery.docs.forEach(doc => {
+      batch.update(doc.ref, { read: true });
+    });
+    
+    if (!unreadMessagesQuery.empty) {
+      await batch.commit();
+    }
+
+    // Also update unread count in user's conversation list
     await db
       .collection('users')
       .doc(user.id)
@@ -135,15 +212,22 @@ export const getMessages = async (req, res, next) => {
       .doc(conversationId)
       .update({
         unreadCount: 0
-      });
+      })
+      .catch(err => console.warn('Could not update unread count:', err.message));
 
     return res.status(200).json({
       success: true,
-      messages
+      messages,
+      conversationId
     });
+    
   } catch (error) {
     console.error('Error fetching messages:', error);
-    return res.status(500).json({ success: false, message: 'Server error' });
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch messages',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -165,6 +249,10 @@ export const sendMessage = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Message text or music is required' });
     }
 
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'Recipient user ID is required' });
+    }
+
     // Check if other user exists
     const otherUserDoc = await db.collection('users').doc(userId).get();
     if (!otherUserDoc.exists) {
@@ -174,6 +262,10 @@ export const sendMessage = async (req, res, next) => {
     // Find or create conversation
     let conversationId = await getOrCreateConversation(user.id, userId);
     
+    if (!conversationId) {
+      return res.status(500).json({ success: false, message: 'Failed to create conversation' });
+    }
+
     // Create message
     const messageData = {
       senderId: user.id,
@@ -194,17 +286,22 @@ export const sendMessage = async (req, res, next) => {
       .add(messageData);
 
     // Update conversation last message info
+    const lastMessageText = text || (isMusic ? `🎵 Shared: ${musicTitle} by ${musicArtist}` : '');
+    
     await db
       .collection('conversations')
       .doc(conversationId)
       .update({
-        lastMessage: text || `🎵 Shared: ${musicTitle} by ${musicArtist}`,
+        lastMessage: lastMessageText,
         lastMessageTime: new Date(),
-        lastMessageSenderId: user.id
+        lastMessageSenderId: user.id,
+        updatedAt: new Date()
       });
 
-    // Update user's conversation list
-    await updateUserConversation(user.id, conversationId, userId, messageData);
+    // Update user's conversation list for sender
+    await updateUserConversation(user.id, conversationId, userId, messageData, false);
+    
+    // Update user's conversation list for receiver (with unread count increment)
     await updateUserConversation(userId, conversationId, user.id, messageData, true);
 
     return res.status(201).json({
@@ -217,9 +314,14 @@ export const sendMessage = async (req, res, next) => {
         timestamp: messageData.timestamp.toISOString()
       }
     });
+    
   } catch (error) {
     console.error('Error sending message:', error);
-    return res.status(500).json({ success: false, message: 'Server error' });
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Failed to send message',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -227,28 +329,92 @@ export const sendMessage = async (req, res, next) => {
 // Helper: Get or create conversation between two users
 //==========================================================
 async function getOrCreateConversation(userId1, userId2) {
-  // Check if conversation exists
-  const conversationsRef = db.collection('conversations');
-  const existingConversation = await conversationsRef
-    .where('participants', 'array-contains', userId1)
-    .get();
-  
-  for (const doc of existingConversation.docs) {
-    const data = doc.data();
-    if (data.participants.includes(userId2)) {
-      return doc.id;
+  try {
+    // Check if conversation exists
+    const conversationsRef = db.collection('conversations');
+    const existingConversation = await conversationsRef
+      .where('participants', 'array-contains', userId1)
+      .get();
+    
+    for (const doc of existingConversation.docs) {
+      const data = doc.data();
+      if (data.participants && data.participants.includes(userId2)) {
+        return doc.id;
+      }
     }
+
+    // Create new conversation
+    const newConversationRef = await conversationsRef.add({
+      participants: [userId1, userId2],
+      createdAt: new Date(),
+      lastMessage: '',
+      lastMessageTime: new Date(),
+      updatedAt: new Date()
+    });
+
+    return newConversationRef.id;
+  } catch (error) {
+    console.error('Error in getOrCreateConversation:', error);
+    return null;
   }
+}
 
-  // Create new conversation
-  const newConversationRef = await conversationsRef.add({
-    participants: [userId1, userId2],
-    createdAt: new Date(),
-    lastMessage: '',
-    lastMessageTime: new Date()
-  });
+// Helper: Update user's conversation list
+async function updateUserConversation(userId, conversationId, otherUserId, messageData, incrementUnread = false) {
+  try {
+    const userConversationRef = db
+      .collection('users')
+      .doc(userId)
+      .collection('conversations')
+      .doc(conversationId);
 
-  return newConversationRef.id;
+    // Get other user's info
+    let otherUserName = 'User';
+    let otherUserAvatar = null;
+    let otherUserOnline = false;
+    
+    try {
+      const otherUserDoc = await db.collection('users').doc(otherUserId).get();
+      if (otherUserDoc.exists) {
+        const otherData = otherUserDoc.data();
+        otherUserName = otherData.fullname || otherData.displayName || otherData.username || 'User';
+        otherUserAvatar = otherData.photoURL || null;
+        otherUserOnline = otherData.isOnline || false;
+      }
+    } catch (err) {
+      console.warn('Could not fetch other user info:', err.message);
+    }
+
+    const lastMessageText = messageData.text || (messageData.isMusic ? `🎵 Shared a song` : '');
+    
+    const updateData = {
+      conversationId,
+      otherUserId,
+      otherUserName,
+      otherUserAvatar,
+      otherUserOnline,
+      lastMessage: lastMessageText,
+      lastMessageTime: messageData.timestamp,
+      lastMessageSenderId: messageData.senderId,
+      updatedAt: new Date()
+    };
+
+    if (incrementUnread && messageData.senderId !== userId) {
+      // Increment unread count for receiver
+      const existingDoc = await userConversationRef.get();
+      if (existingDoc.exists) {
+        updateData.unreadCount = (existingDoc.data().unreadCount || 0) + 1;
+      } else {
+        updateData.unreadCount = 1;
+      }
+    } else {
+      updateData.unreadCount = 0;
+    }
+
+    await userConversationRef.set(updateData, { merge: true });
+  } catch (error) {
+    console.error('Error updating user conversation:', error);
+  }
 }
 
 //===========================================
