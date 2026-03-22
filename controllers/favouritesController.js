@@ -1,6 +1,7 @@
 import { db } from '../config/firebase.js';
 import Cors from 'cors';
 import jwt from 'jsonwebtoken';
+import { FieldValue } from 'firebase-admin/firestore';
 
 // Helper to run CORS middleware
 function runMiddleware(req, res, fn) {
@@ -133,7 +134,7 @@ export const addFavorite = async (req, res, next) => {
 
     // Also increment the favorite count on the music document
     await db.collection('music').doc(songId).update({
-      favoriteCount: admin.firestore.FieldValue.increment(1)
+      favoriteCount: FieldValue.increment(1)
     });
 
     return res.status(200).json({
@@ -180,7 +181,7 @@ export const removeFavorite = async (req, res, next) => {
 
     // Decrement the favorite count on the music document
     await db.collection('music').doc(songId).update({
-      favoriteCount: admin.firestore.FieldValue.increment(-1)
+      favoriteCount: FieldValue.increment(-1)
     });
 
     return res.status(200).json({
