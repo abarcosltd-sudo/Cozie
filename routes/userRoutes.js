@@ -11,7 +11,6 @@ router.post("/signup", signupUser);
 router.post("/login", loginUser);
 router.get("/profile", getProfile);
 router.post("/verify-otp", verifyOTP);
-router.get('/available', getAvailableUsers);
 router.post("/preferences", protect, savePreferences);
 router.get("/me", protect, getCurrentUser);
 router.put("/profile", protect, updateProfile); 
@@ -20,6 +19,7 @@ router.get('/favorites', protect, getFavorites);
 router.get('/favorites/:songId', protect, checkFavorite);
 router.post('/favorites/:songId', protect, addFavorite);
 router.delete('/favorites/:songId', protect, removeFavorite);
+router.get('/available', getAvailableUsers);
 
 export default router;
 
