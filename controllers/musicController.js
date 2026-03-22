@@ -186,6 +186,8 @@ export const addMusic = async (req, res) => {
       description = "",
       lyrics = "",
       tags = "",
+      favoriteCount = 0,
+      likeCount = 0
     } = req.body;
 
     // Basic validation
