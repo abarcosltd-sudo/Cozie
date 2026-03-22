@@ -353,6 +353,7 @@ export const getTrendingMusic = async (req, res, next) => {
 //=======================================================================
 export const getTopCharts = async (req, res, next) => {
   await runMiddleware(req, res, cors);
+
   try {
     const snapshot = await db.collection('music')
       .orderBy('likeCount', 'desc')
@@ -367,6 +368,11 @@ export const getTopCharts = async (req, res, next) => {
         title: data.title || 'Untitled',
         artist: data.artist || 'Unknown Artist',
         albumArtUrl: data.albumArtUrl || null,
+        fileUrl: data.fileUrl || null,  
+        duration: data.duration || 0,
+        genre: data.genre || null,
+        releaseYear: data.releaseYear || null,
+        likeCount: data.likeCount || 0
       };
     });
 
