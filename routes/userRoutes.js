@@ -1,6 +1,7 @@
 // routes/userRoutes.js
 import express from "express";
-import { signupUser, getProfile, loginUser, verifyOTP, savePreferences, getCurrentUser, updateProfile, generateUploadURL, getAvailableUsers } from "../controllers/userController.js";
+import { signupUser, getProfile, loginUser, verifyOTP, savePreferences, getCurrentUser, updateProfile, generateUploadURL } from "../controllers/userController.js";
+impoty { getAvailableUsers } from "../controllers/messageController.js";
 import { checkFavorite, addFavorite, removeFavorite, getFavorites } from '../controllers/favouritesController.js';
 import { protect } from "../middleware/authMiddleware.js";
 
