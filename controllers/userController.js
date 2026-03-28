@@ -57,27 +57,27 @@ const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expires
 
 //const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
-const sendOTPEmail = async (email, otp) => {
-  const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: process.env.EMAIL_PORT,
-    secure: process.env.EMAIL_PORT === '465', // true for 465, false for other ports
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
+// const sendOTPEmail = async (email, otp) => {
+//   const transporter = nodemailer.createTransport({
+//     host: process.env.EMAIL_HOST,
+//     port: process.env.EMAIL_PORT,
+//     secure: process.env.EMAIL_PORT === '465', // true for 465, false for other ports
+//     auth: {
+//       user: process.env.EMAIL_USER,
+//       pass: process.env.EMAIL_PASS,
+//     },
+//   });
 
-  const mailOptions = {
-    from: process.env.EMAIL_FROM,
-    to: email,
-    subject: 'Your Coozie Verification Code',
-    text: `Your verification code is: ${otp}`,
-    html: `<p>Your verification code is: <strong>${otp}</strong></p>`,
-  };
+//   const mailOptions = {
+//     from: process.env.EMAIL_FROM,
+//     to: email,
+//     subject: 'Your Coozie Verification Code',
+//     text: `Your verification code is: ${otp}`,
+//     html: `<p>Your verification code is: <strong>${otp}</strong></p>`,
+//   };
 
-  await transporter.sendMail(mailOptions);
-};
+//   await transporter.sendMail(mailOptions);
+// };
 
 // =======================
 // Signup user
