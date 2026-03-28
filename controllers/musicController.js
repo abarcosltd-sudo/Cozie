@@ -382,3 +382,103 @@ export const getTopCharts = async (req, res, next) => {
     next(error);
   }
 };
+
+//=========================================
+// get song by ID
+//=========================================
+export const getSongById = async (req, res, next) => {
+  await runMiddleware(req, res, cors);
+  try {
+    const { songId } = req.params;
+    
+    if (!songId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Song ID is required' 
+      });
+    }
+    
+    // Fetch song from Firestore
+    const songDoc = await db.collection('music').doc(songId).get();
+    
+    if (!songDoc.exists) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Song not found' 
+      });
+    }
+    
+    const songData = songDoc.data();
+    
+    // Get user info if you want to include uploader details
+    let uploaderName = 'Unknown Artist';
+    let uploaderAvatar = null;
+    
+    if (songData.userId) {
+      const userDoc = await db.collection('users').doc(songData.userId).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        uploaderName = userData.fullname || userData.displayName || userData.username || 'Unknown Artist';
+        uploaderAvatar = userData.photoURL || null;
+      }
+    }
+    
+    // Get like count (if not already stored)
+    const likesSnapshot = await db
+      .collection('music')
+      .doc(songId)
+      .collection('likes')
+      .count()
+      .get();
+    const likeCount = likesSnapshot.data().count;
+    
+    // Check if current user has liked this song
+    let likedByUser = false;
+    if (req.user && req.user.id) {
+      const userLikeDoc = await db
+        .collection('music')
+        .doc(songId)
+        .collection('likes')
+        .doc(req.user.id)
+        .get();
+      likedByUser = userLikeDoc.exists;
+    }
+    
+    // Format response
+    const song = {
+      id: songDoc.id,
+      title: songData.title || 'Untitled',
+      artist: songData.artist || 'Unknown Artist',
+      albumArtUrl: songData.albumArtUrl || null,
+      fileUrl: songData.fileUrl || null,
+      duration: songData.duration || 0,
+      genre: songData.genre || null,
+      releaseYear: songData.releaseYear || null,
+      language: songData.language || null,
+      mood: songData.mood || null,
+      bpm: songData.bpm || null,
+      musicalKey: songData.musicalKey || null,
+      description: songData.description || '',
+      lyrics: songData.lyrics || '',
+      uploaderId: songData.userId || null,
+      uploaderName: uploaderName,
+      uploaderAvatar: uploaderAvatar,
+      likeCount: likeCount,
+      likedByUser: likedByUser,
+      createdAt: songData.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+    };
+    
+    return res.status(200).json({
+      success: true,
+      song
+    });
+    
+  } catch (error) {
+    console.error('Error fetching song by ID:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch song',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
