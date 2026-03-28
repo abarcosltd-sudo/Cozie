@@ -18,32 +18,32 @@ const allowedOrigins = [
   "https://cozie-kohl.vercel.app" // backend url
 ];
 
-// const corsOptions = {
-//   origin: (origin, callback) => {
-//     if (!origin || origin.includes("vercel.app") || origin.includes("localhost") || allowedOrigins.includes(origin)) {
-//       callback(null, true);
-//     } else {
-//       callback(new Error("CORS not allowed"));
-//     }
-//   },
-//   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-//   credentials: true,
-//   allowedHeaders: ["Content-Type", "Authorization"]
-// };
-
-// CORS configuration
 const corsOptions = {
-  origin: [
-    'https://cozie-cs.vercel.app',           
-    'http://localhost:3000',                  
-    'http://localhost:5173',                  
-    'https://cozie-kohl.vercel.app',          
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  origin: (origin, callback) => {
+    if (!origin || origin.includes("vercel.app") || origin.includes("localhost") || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("CORS not allowed"));
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   credentials: true,
-  optionsSuccessStatus: 200,
+  allowedHeaders: ["Content-Type", "Authorization"]
 };
+
+// // CORS configuration
+// const corsOptions = {
+//   origin: [
+//     'https://cozie-cs.vercel.app',           
+//     'http://localhost:3000',                  
+//     'http://localhost:5173',                  
+//     'https://cozie-kohl.vercel.app',          
+//   ],
+//   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+//   allowedHeaders: ['Content-Type', 'Authorization'],
+//   credentials: true,
+//   optionsSuccessStatus: 200,
+// };
 
 // Apply CORS middleware
 app.use(cors(corsOptions));
