@@ -1,6 +1,6 @@
 // routes/postRoutes.js
 import express from "express";
-import { shareMusicPost, getMusicPosts, likePost, addComment } from "../controllers/musicPostController.js";
+import { shareMusicPost, getMusicPosts, likePost, addComment, getComments } from "../controllers/musicPostController.js";
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
