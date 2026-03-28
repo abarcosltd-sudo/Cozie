@@ -411,7 +411,8 @@ export const getSongById = async (req, res, next) => {
       });
     }
     
-    // Fetch song from Firestore
+    console.log('Fetching song with ID:', songId);
+    
     const songDoc = await db.collection('music').doc(songId).get();
     
     if (!songDoc.exists) {
@@ -423,53 +424,6 @@ export const getSongById = async (req, res, next) => {
     
     const songData = songDoc.data();
     
-    // Get like count from subcollection
-    let likeCount = 0;
-    try {
-      const likesSnapshot = await db
-        .collection('music')
-        .doc(songId)
-        .collection('likes')
-        .count()
-        .get();
-      likeCount = likesSnapshot.data().count;
-    } catch (err) {
-      console.warn('Could not fetch like count:', err.message);
-    }
-    
-    // Check if current user has liked this song
-    let likedByUser = false;
-    if (req.user && req.user.id) {
-      try {
-        const userLikeDoc = await db
-          .collection('music')
-          .doc(songId)
-          .collection('likes')
-          .doc(req.user.id)
-          .get();
-        likedByUser = userLikeDoc.exists;
-      } catch (err) {
-        console.warn('Could not check user like:', err.message);
-      }
-    }
-    
-    // Get user info (uploader)
-    let uploaderName = null;
-    let uploaderAvatar = null;
-    if (songData.userId) {
-      try {
-        const userDoc = await db.collection('users').doc(songData.userId).get();
-        if (userDoc.exists) {
-          const userData = userDoc.data();
-          uploaderName = userData.fullname || userData.displayName || userData.username;
-          uploaderAvatar = userData.photoURL || null;
-        }
-      } catch (err) {
-        console.warn('Could not fetch user info:', err.message);
-      }
-    }
-    
-    // Format response
     const song = {
       id: songDoc.id,
       title: songData.title || 'Untitled',
@@ -479,66 +433,19 @@ export const getSongById = async (req, res, next) => {
       duration: songData.duration || 0,
       genre: songData.genre || null,
       releaseYear: songData.releaseYear || null,
-      language: songData.language || null,
-      mood: songData.mood || null,
-      bpm: songData.bpm || null,
-      musicalKey: songData.musicalKey || null,
-      description: songData.description || '',
-      lyrics: songData.lyrics || '',
-      uploaderId: songData.userId || null,
-      uploaderName: uploaderName,
-      uploaderAvatar: uploaderAvatar,
-      likeCount: likeCount,
-      likedByUser: likedByUser,
-      createdAt: songData.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
     };
-    
-    // Fetch queue (related songs) - optional
-    let queue = [];
-    try {
-      // Get songs by same artist or trending
-      let relatedSnapshot;
-      if (songData.artist) {
-        relatedSnapshot = await db.collection('music')
-          .where('artist', '==', songData.artist)
-          .limit(10)
-          .get();
-      }
-      
-      if (!relatedSnapshot || relatedSnapshot.empty) {
-        relatedSnapshot = await db.collection('music')
-          .orderBy('createdAt', 'desc')
-          .limit(10)
-          .get();
-      }
-      
-      queue = relatedSnapshot.docs
-        .filter(doc => doc.id !== songId)
-        .slice(0, 9)
-        .map(doc => ({
-          id: doc.id,
-          title: doc.data().title || 'Untitled',
-          artist: doc.data().artist || 'Unknown Artist',
-          albumArtUrl: doc.data().albumArtUrl || null,
-          fileUrl: doc.data().fileUrl || null,
-          duration: doc.data().duration || 0,
-        }));
-    } catch (err) {
-      console.warn('Could not fetch queue:', err.message);
-    }
     
     return res.status(200).json({
       success: true,
       song,
-      queue
+      queue: []
     });
     
   } catch (error) {
-    console.error('Error fetching song by ID:', error);
+    console.error('Error fetching song:', error);
     return res.status(500).json({ 
       success: false, 
-      message: 'Failed to fetch song',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Failed to fetch song' 
     });
   }
 };
