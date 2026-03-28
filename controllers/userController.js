@@ -5,17 +5,40 @@ import jwt from "jsonwebtoken";
 import Cors from "cors";
 import crypto from 'crypto'; // for generating OTP
 
-// Setup CORS middleware
+// // Setup CORS middleware
+// const cors = Cors({
+//   origin: function (origin, callback) {
+//     if (!origin || origin.includes("vercel.app") || origin.includes("localhost")) {
+//       callback(null, true);
+//     } else {
+//       callback(new Error("Not allowed by CORS"));
+//     }
+//   },
+//   methods: ["GET", "POST", "OPTIONS"],
+//   allowedHeaders: ["Content-Type", "Authorization"],
+//   credentials: true,
+// });
+
+// In your CORS configuration
 const cors = Cors({
   origin: function (origin, callback) {
-    if (!origin || origin.includes("vercel.app") || origin.includes("localhost")) {
+    const allowedOrigins = [
+      'https://cozie-cs.vercel.app',
+      'http://localhost:3000',
+      'http://localhost:5173',
+    ];
+    
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      callback(new Error("Not allowed by CORS"));
+      callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 });
 
