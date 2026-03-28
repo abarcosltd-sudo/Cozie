@@ -1,5 +1,5 @@
 import { db, frontendBucket } from "../config/firebase.js";
-import { sendOTPEmail, generateOTP, testEmailConfig } from '../config/email.js';
+import { sendOTPEmail, generateOTP } from '../config/email.js';
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import Cors from "cors";
