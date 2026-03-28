@@ -61,7 +61,7 @@ app.use((req, res, next) => {
 // Apply CORS middleware
 app.use(cors(corsOptions));
 // Handle preflight requests explicitly
-app.options('*', cors(corsOptions));
+app.options('/*', cors(corsOptions));
 
 // Middleware
 app.use(express.json());
