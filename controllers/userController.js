@@ -1,13 +1,10 @@
 import { db, frontendBucket } from "../config/firebase.js";
+import { sendOTPEmail, generateOTP, testEmailConfig } from '../config/email.js';
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import Cors from "cors";
-import nodemailer from 'nodemailer'; // or use your preferred email service
 import crypto from 'crypto'; // for generating OTP
-// import fs from "fs";
-// import path from "path";
 import { v4 as uuidv4 } from "uuid";
-// import multer from "multer";
 
 // Setup CORS middleware
 const cors = Cors({
@@ -89,34 +86,49 @@ export const signupUser = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 12);
     const newUserRef = db.collection('users').doc();
 
+    // Generate OTP
     const otp = generateOTP();
-    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    const otpExpiresAt = new Date();
+    otpExpiresAt.setMinutes(otpExpiresAt.getMinutes() + 10);
 
-    const newUser = {
-      id: newUserRef.id,
+    // Create user in Firestore
+    const userRef = db.collection('users').doc();
+    await userRef.set({
+      id: userRef.id,
       fullname,
       username,
-      email: normalizedEmail,
+      email,
       password: hashedPassword,
-      createdAt: new Date(),
       isVerified: false,
       otp: {
         code: otp,
         expiresAt: otpExpiresAt,
       },
-    };
-
-    await newUserRef.set(newUser);
-
+      createdAt: new Date(),
+    });
+    
     // Try to send email, but don't fail the signup if it fails
     let emailSent = false;
+    // Send OTP email
     try {
-      await sendOTPEmail(normalizedEmail, otp);
-      emailSent = true;
-    } catch (emailErr) {
-      console.error('Failed to send OTP email:', emailErr);
-      // Log the full error for debugging
-      console.error('Email error details:', emailErr.message);
+      await sendOTPEmail(email, otp, fullname);
+      console.log(`OTP sent to ${email}`);
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Verification code sent to your email',
+        userId: userRef.id,
+      });
+    } catch (emailError) {
+      console.error('Email sending failed:', emailError.message);
+      
+      // Account created but email failed
+      return res.status(200).json({
+        success: true,
+        warning: 'Account created but verification email could not be sent. Please check your email settings or contact support.',
+        userId: userRef.id,
+        emailFailed: true,
+      });
     }
 
     // Always return a 201 success (user is created)
