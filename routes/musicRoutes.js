@@ -8,11 +8,11 @@ const router = express.Router();
 
 router.post("/generate-upload-url", protect, generateUploadURL);
 router.post("/generate-album-art-url", protect, generateAlbumArtURL);
+router.get('/:songId', protect, getSongById);
 router.post("/add-music", protect, addMusic);
 router.get("/search", protect, searchMusic);
 router.get('/trending', protect, getTrendingMusic);
 router.get('/charts', protect, getTopCharts);
-router.get('/:songId', protect, getSongById);
 router.post('/:songId/like', protect, likeSong);
 router.get('/:songId/likes', protect, getSongLikes);
 router.get('/liked', protect, getUserLikedSongs);
