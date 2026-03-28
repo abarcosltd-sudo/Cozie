@@ -6,15 +6,15 @@ import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-router.post("/generate-upload-url", generateUploadURL);
-router.post("/generate-album-art-url", generateAlbumArtURL);
-router.post("/add-music", addMusic);
-router.get("/search", searchMusic);
-router.get('/trending', getTrendingMusic);
-router.get('/charts', getTopCharts);
-router.post('/:songId/like', likeSong);
-router.get('/:songId/likes', getSongLikes);
-router.get('/liked', getUserLikedSongs);
+router.post("/generate-upload-url", protect, generateUploadURL);
+router.post("/generate-album-art-url", protect, generateAlbumArtURL);
+router.post("/add-music", protect, addMusic);
+router.get("/search", protect, searchMusic);
+router.get('/trending', protect, getTrendingMusic);
+router.get('/charts', protect, getTopCharts);
+router.post('/:songId/like', protect, likeSong);
+router.get('/:songId/likes', protect, getSongLikes);
+router.get('/liked', protect, getUserLikedSongs);
 router.get('/:songId', protect, getSongById);
 
 export default router;
