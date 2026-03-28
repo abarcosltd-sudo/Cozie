@@ -119,13 +119,14 @@ app.post("/api/test", (req, res) => {
   });
 });
 
+// Catch-all for 404 - use named wildcard
+app.use('/*path', (req, res) => {
+  res.status(404).json({ success: false, message: 'Route not found' });
+});
+
 // Error handler
 app.use(errorHandler);
 
 // Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-
-
-
-
