@@ -2,9 +2,6 @@
 import express from "express";
 import cors from "cors";
 import nodemailer from 'nodemailer'; // or use your preferred email service
-//import dotenv from "dotenv";
-// dotenv.config();
-
 import userRoutes from "./routes/userRoutes.js";
 import musicRoutes from "./routes/musicRoutes.js";
 import postRoutes from "./routes/postRoutes.js";
@@ -21,22 +18,37 @@ const allowedOrigins = [
   "https://cozie-kohl.vercel.app" // backend url
 ];
 
+// const corsOptions = {
+//   origin: (origin, callback) => {
+//     if (!origin || origin.includes("vercel.app") || origin.includes("localhost") || allowedOrigins.includes(origin)) {
+//       callback(null, true);
+//     } else {
+//       callback(new Error("CORS not allowed"));
+//     }
+//   },
+//   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+//   credentials: true,
+//   allowedHeaders: ["Content-Type", "Authorization"]
+// };
+
+// CORS configuration
 const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin || origin.includes("vercel.app") || origin.includes("localhost") || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("CORS not allowed"));
-    }
-  },
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  origin: [
+    'https://cozie-cs.vercel.app',           
+    'http://localhost:3000',                  
+    'http://localhost:5173',                  
+    'https://cozie-kohl.vercel.app',          
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
-  allowedHeaders: ["Content-Type", "Authorization"]
+  optionsSuccessStatus: 200,
 };
 
 // Apply CORS middleware
 app.use(cors(corsOptions));
-
+// Handle preflight requests explicitly
+app.options('*', cors(corsOptions));
 
 // Middleware
 app.use(express.json());
