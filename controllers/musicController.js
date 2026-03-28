@@ -320,9 +320,10 @@ export const getTrendingMusic = async (req, res, next) => {
   await runMiddleware(req, res, cors);
 
   try {
+    // Query songs ordered by creation date (newest first)
     const snapshot = await db.collection('music')
       .orderBy('createdAt', 'desc')
-      .limit(10)
+      .limit(20)
       .get();
 
     const trending = snapshot.docs.map(doc => {
@@ -332,19 +333,24 @@ export const getTrendingMusic = async (req, res, next) => {
         title: data.title || 'Untitled',
         artist: data.artist || 'Unknown Artist',
         albumArtUrl: data.albumArtUrl || null,
-        fileUrl: data.fileUrl || null, 
-        duration: data.duration || 0,   
-        genre: data.genre || null,     
-        releaseYear: data.releaseYear || null, 
-        likeCount: data.likeCount || 0,  
-        favoriteCount: data.favoriteCount || 0 
+        fileUrl: data.fileUrl || null,
+        duration: data.duration || 0,
+        genre: data.genre || null,
+        releaseYear: data.releaseYear || null,
+        likeCount: data.likeCount || 0,
       };
     });
 
-    res.json({ success: true, trending });
+    return res.status(200).json({
+      success: true,
+      trending
+    });
   } catch (error) {
     console.error('Error fetching trending music:', error);
-    next(error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch trending music' 
+    });
   }
 };
 
@@ -355,9 +361,10 @@ export const getTopCharts = async (req, res, next) => {
   await runMiddleware(req, res, cors);
 
   try {
+    // Query songs ordered by like count (most liked first)
     const snapshot = await db.collection('music')
       .orderBy('likeCount', 'desc')
-      .limit(10)
+      .limit(20)
       .get();
 
     const charts = snapshot.docs.map((doc, index) => {
@@ -368,18 +375,24 @@ export const getTopCharts = async (req, res, next) => {
         title: data.title || 'Untitled',
         artist: data.artist || 'Unknown Artist',
         albumArtUrl: data.albumArtUrl || null,
-        fileUrl: data.fileUrl || null,  
+        fileUrl: data.fileUrl || null,
         duration: data.duration || 0,
         genre: data.genre || null,
         releaseYear: data.releaseYear || null,
-        likeCount: data.likeCount || 0
+        likeCount: data.likeCount || 0,
       };
     });
 
-    res.json({ success: true, charts });
+    return res.status(200).json({
+      success: true,
+      charts
+    });
   } catch (error) {
     console.error('Error fetching top charts:', error);
-    next(error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch top charts' 
+    });
   }
 };
 
