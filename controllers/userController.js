@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import Cors from "cors";
 import crypto from 'crypto'; // for generating OTP
+import { v4 as uuidv4 } from 'uuid';
 
 // // Setup CORS middleware
 // const cors = Cors({
