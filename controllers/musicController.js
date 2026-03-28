@@ -410,38 +410,50 @@ export const getSongById = async (req, res, next) => {
     
     const songData = songDoc.data();
     
-    // Get user info if you want to include uploader details
-    let uploaderName = 'Unknown Artist';
-    let uploaderAvatar = null;
-    
-    if (songData.userId) {
-      const userDoc = await db.collection('users').doc(songData.userId).get();
-      if (userDoc.exists) {
-        const userData = userDoc.data();
-        uploaderName = userData.fullname || userData.displayName || userData.username || 'Unknown Artist';
-        uploaderAvatar = userData.photoURL || null;
-      }
+    // Get like count from subcollection
+    let likeCount = 0;
+    try {
+      const likesSnapshot = await db
+        .collection('music')
+        .doc(songId)
+        .collection('likes')
+        .count()
+        .get();
+      likeCount = likesSnapshot.data().count;
+    } catch (err) {
+      console.warn('Could not fetch like count:', err.message);
     }
-    
-    // Get like count (if not already stored)
-    const likesSnapshot = await db
-      .collection('music')
-      .doc(songId)
-      .collection('likes')
-      .count()
-      .get();
-    const likeCount = likesSnapshot.data().count;
     
     // Check if current user has liked this song
     let likedByUser = false;
     if (req.user && req.user.id) {
-      const userLikeDoc = await db
-        .collection('music')
-        .doc(songId)
-        .collection('likes')
-        .doc(req.user.id)
-        .get();
-      likedByUser = userLikeDoc.exists;
+      try {
+        const userLikeDoc = await db
+          .collection('music')
+          .doc(songId)
+          .collection('likes')
+          .doc(req.user.id)
+          .get();
+        likedByUser = userLikeDoc.exists;
+      } catch (err) {
+        console.warn('Could not check user like:', err.message);
+      }
+    }
+    
+    // Get user info (uploader)
+    let uploaderName = null;
+    let uploaderAvatar = null;
+    if (songData.userId) {
+      try {
+        const userDoc = await db.collection('users').doc(songData.userId).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          uploaderName = userData.fullname || userData.displayName || userData.username;
+          uploaderAvatar = userData.photoURL || null;
+        }
+      } catch (err) {
+        console.warn('Could not fetch user info:', err.message);
+      }
     }
     
     // Format response
@@ -468,9 +480,44 @@ export const getSongById = async (req, res, next) => {
       createdAt: songData.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
     };
     
+    // Fetch queue (related songs) - optional
+    let queue = [];
+    try {
+      // Get songs by same artist or trending
+      let relatedSnapshot;
+      if (songData.artist) {
+        relatedSnapshot = await db.collection('music')
+          .where('artist', '==', songData.artist)
+          .limit(10)
+          .get();
+      }
+      
+      if (!relatedSnapshot || relatedSnapshot.empty) {
+        relatedSnapshot = await db.collection('music')
+          .orderBy('createdAt', 'desc')
+          .limit(10)
+          .get();
+      }
+      
+      queue = relatedSnapshot.docs
+        .filter(doc => doc.id !== songId)
+        .slice(0, 9)
+        .map(doc => ({
+          id: doc.id,
+          title: doc.data().title || 'Untitled',
+          artist: doc.data().artist || 'Unknown Artist',
+          albumArtUrl: doc.data().albumArtUrl || null,
+          fileUrl: doc.data().fileUrl || null,
+          duration: doc.data().duration || 0,
+        }));
+    } catch (err) {
+      console.warn('Could not fetch queue:', err.message);
+    }
+    
     return res.status(200).json({
       success: true,
-      song
+      song,
+      queue
     });
     
   } catch (error) {
