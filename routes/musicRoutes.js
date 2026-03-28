@@ -1,7 +1,7 @@
 // routes/musicRoutes.js
 import express from "express";
-import { generateUploadURL, generateAlbumArtURL, addMusic, searchMusic, getTrendingMusic, getTopCharts } from "../controllers/musicController.js";
-import { likeSong, getSongLikes, getUserLikedSongs } from '../controllers/musicLikeController.js';
+import { generateUploadURL, generateAlbumArtURL, addMusic, searchMusic, getTrendingMusic, getTopCharts, likeSong, getSongLikes, getUserLikedSongs } from "../controllers/musicController.js";
+//import { likeSong, getSongLikes, getUserLikedSongs } from '../controllers/musicLikeController.js';
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
