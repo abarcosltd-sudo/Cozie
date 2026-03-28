@@ -173,6 +173,7 @@ export const getMusicPosts = async (req, res, next) => {
 
       posts.push({
         id: doc.id,
+        songId: postData.songId,
         userName: userData.fullname || userData.displayName || 'User',
         userAvatarUrl: userAvatarUrl,
         createdAt: postData.createdAt ? postData.createdAt.toDate().toISOString() : new Date().toISOString(),
