@@ -257,56 +257,118 @@ export const likePost = async (req, res, next) => {
     next(error);
   }
 };
-//===============================
-// Add comment
-//===============================
+
+//===========================================
+// Get Comments
+//===========================================
+export const getComments = async (req, res, next) => {
+  await runMiddleware(req, res, cors);
+  
+  try {
+    const { postId } = req.params;
+    
+    const commentsSnapshot = await db
+      .collection('musicPosts')
+      .doc(postId)
+      .collection('comments')
+      .orderBy('createdAt', 'desc')
+      .limit(50)
+      .get();
+    
+    const comments = [];
+    for (const doc of commentsSnapshot.docs) {
+      const commentData = doc.data();
+      
+      // Get user info
+      let userName = 'User';
+      let userAvatarUrl = null;
+      
+      if (commentData.userId) {
+        const userDoc = await db.collection('users').doc(commentData.userId).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          userName = userData.fullname || userData.displayName || userData.username || 'User';
+          userAvatarUrl = userData.photoURL || null;
+        }
+      }
+      
+      comments.push({
+        id: doc.id,
+        userId: commentData.userId,
+        userName: commentData.userName || userName,
+        userAvatarUrl: commentData.userAvatarUrl || userAvatarUrl,
+        text: commentData.text,
+        createdAt: commentData.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+      });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      comments,
+      count: comments.length
+    });
+  } catch (error) {
+    console.error('Error fetching comments:', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+//============================================
+// Add Comment
+//============================================
 export const addComment = async (req, res, next) => {
   await runMiddleware(req, res, cors);
-  const user = await authenticate(req, res);
-  if (!user) return;
-
-  const { postId } = req.params;
-  const { text } = req.body;
-  if (!text || text.trim() === '') {
-    return res.status(400).json({ success: false, message: 'Comment text is required' });
-  }
-
   try {
+    const { postId } = req.params;
+    const { text } = req.body;
+    const userId = req.user.id; // Assuming user is attached via auth middleware
+    
+    if (!text || !text.trim()) {
+      return res.status(400).json({ success: false, message: 'Comment text is required' });
+    }
+    
+    // Check if post exists
     const postRef = db.collection('musicPosts').doc(postId);
     const postDoc = await postRef.get();
     if (!postDoc.exists) {
       return res.status(404).json({ success: false, message: 'Post not found' });
     }
-
-    // Fetch user's name (optional, for denormalization)
-    const userDoc = await db.collection('users').doc(user.id).get();
-    const userName = userDoc.exists ? (userDoc.data().fullname || userDoc.data().displayName || 'User') : 'User';
-
-    // Add comment to subcollection
-    const commentRef = postRef.collection('comments').doc();
-    await commentRef.set({
-      userId: user.id,
-      userName: userName,
+    
+    // Get user info
+    const userDoc = await db.collection('users').doc(userId).get();
+    const userData = userDoc.data();
+    const userName = userData?.fullname || userData?.displayName || userData?.username || 'User';
+    const userAvatarUrl = userData?.photoURL || null;
+    
+    // Create comment
+    const commentData = {
+      userId,
+      userName,
+      userAvatarUrl,
       text: text.trim(),
       createdAt: new Date(),
-    });
-
-    // Increment comment count on the post
+    };
+    
+    const commentRef = await postRef
+      .collection('comments')
+      .add(commentData);
+    
+    // Update comment count on post
     await postRef.update({
       commentCount: FieldValue.increment(1)
     });
-
-    // Get the updated comment count
-    const newCountSnapshot = await postRef.collection('comments').count().get();
-    const newCount = newCountSnapshot.data().count;
-
+    
     return res.status(201).json({
       success: true,
       commentId: commentRef.id,
-      commentCount: newCount
+      comment: {
+        id: commentRef.id,
+        ...commentData,
+        createdAt: commentData.createdAt.toISOString(),
+      }
     });
   } catch (error) {
     console.error('Error adding comment:', error);
-    next(error);
+    return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
