@@ -15,5 +15,6 @@ router.get('/charts', getTopCharts);
 router.post('/:songId/like', likeSong);
 router.get('/:songId/likes', getSongLikes);
 router.get('/liked', getUserLikedSongs);
+router.get('/:songId', protect, getSongById);
 
 export default router;
