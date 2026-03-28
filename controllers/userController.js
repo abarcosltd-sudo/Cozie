@@ -38,7 +38,7 @@ const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expires
 
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
-const sendOtpEmail = async (email, otp) => {
+const sendOTPEmail = async (email, otp) => {
   const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
     port: process.env.EMAIL_PORT,
