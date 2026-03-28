@@ -90,6 +90,14 @@ app.get('/api/test-email', async (req, res) => {
   }
 });
 
+app.get('/api/test', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'CORS is working!',
+    timestamp: new Date().toISOString()
+  });
+});
+
 app.post("/api/test", (req, res) => {
   console.log("Received:", req.body);
   res.json({
