@@ -55,7 +55,7 @@ function runMiddleware(req, res, fn) {
 // Helper to generate JWT
 const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
-const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
+//const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
 const sendOTPEmail = async (email, otp) => {
   const transporter = nodemailer.createTransport({
