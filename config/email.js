@@ -15,7 +15,7 @@ export const sendOTPEmail = async (email, otp, fullname) => {
     to: email,
     from: process.env.EMAIL_FROM, // Must be a verified sender in SendGrid
     subject: 'Your Cozie Verification Code',
-    text: `Hello ${fullname || 'there'}!\n\nThank you for signing up for Cozie. Your verification code is: ${otp}\n\nThis code will expire in 10 minutes.\n\nIf you didn't request this code, please ignore this email.\n\n© 2024 Cozie`,
+    text: `Hello ${fullname || 'there'}!\n\nThank you for signing up for Coozie. Your verification code is: ${otp}\n\nThis code will expire in 10 minutes.\n\nIf you didn't request this code, please ignore this email.\n\n© 2024 Coozie`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -71,7 +71,7 @@ export const sendOTPEmail = async (email, otp, fullname) => {
       <body>
         <div class="container">
           <div class="header">
-            <h1>🎵 Cozie</h1>
+            <h1>🎵 Coozie</h1>
           </div>
           <div class="content">
             <p><strong>Hello ${fullname || 'there'}!</strong></p>
@@ -81,7 +81,7 @@ export const sendOTPEmail = async (email, otp, fullname) => {
             <p>If you didn't request this, ignore this email.</p>
           </div>
           <div class="footer">
-            <p>© 2024 Cozie</p>
+            <p>© 2024 Coozie</p>
           </div>
         </div>
       </body>
