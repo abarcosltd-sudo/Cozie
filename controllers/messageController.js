@@ -3,7 +3,7 @@ import { db } from '../config/firebase.js';
 import { FieldValue } from 'firebase-admin/firestore';
 import Cors from 'cors';
 import jwt from 'jsonwebtoken';
-import { io } from '../server.js'; // adjust path if needed
+//import { io } from '../server.js'; // adjust path if needed
 
 // Helper to run CORS middleware
 function runMiddleware(req, res, fn) {
@@ -422,31 +422,31 @@ export const sendMessage = async (req, res, next) => {
     await updateUserConversation(user.id, conversationId, userId, messageData, false);
     await updateUserConversation(userId, conversationId, user.id, messageData, true);
 
-    // Emit message in real time
-    const formattedMessage = {
-      id: messageRef.id,
-      senderId: user.id,
-      receiverId: userId,
-      text: text || '',
-      isMusic: isMusic || false,
-      musicTitle: musicTitle || null,
-      musicArtist: musicArtist || null,
-      musicUrl: musicUrl || null,
-      timestamp: messageData.timestamp.toISOString(),
-      read: false
-    };
+    // // Emit message in real time
+    // const formattedMessage = {
+    //   id: messageRef.id,
+    //   senderId: user.id,
+    //   receiverId: userId,
+    //   text: text || '',
+    //   isMusic: isMusic || false,
+    //   musicTitle: musicTitle || null,
+    //   musicArtist: musicArtist || null,
+    //   musicUrl: musicUrl || null,
+    //   timestamp: messageData.timestamp.toISOString(),
+    //   read: false
+    // };
     
-    // Send to receiver
-    io.to(userId).emit('newMessage', {
-      conversationId,
-      message: formattedMessage
-    });
+    // // Send to receiver
+    // io.to(userId).emit('newMessage', {
+    //   conversationId,
+    //   message: formattedMessage
+    // });
     
-    // Optional: send back to sender (keeps UI synced)
-    io.to(user.id).emit('messageSent', {
-      conversationId,
-      message: formattedMessage
-    });
+    // // Optional: send back to sender (keeps UI synced)
+    // io.to(user.id).emit('messageSent', {
+    //   conversationId,
+    //   message: formattedMessage
+    // });
 
     return res.status(201).json({
       success: true,
