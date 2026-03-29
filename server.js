@@ -1,9 +1,9 @@
 // server.js
 import express from "express";
 import cors from "cors";
-import http from 'http';
-import { Server } from 'socket.io';
-import dotenv from 'dotenv';
+// import http from 'http';
+// import { Server } from 'socket.io';
+// import dotenv from 'dotenv';
 
 //import the necessary routes
 //import nodemailer from 'nodemailer'; // or use your preferred email service
@@ -13,7 +13,7 @@ import postRoutes from "./routes/postRoutes.js";
 import messageRoutes from "./routes/messageRoutes.js";
 import errorHandler from "./middleware/errorHandler.js";
 
-dotenv.config();
+//dotenv.config();
 const app = express();
 
 // ===== CORS SETTINGS =====
@@ -130,57 +130,57 @@ app.use('/*path', (req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
 });
 
-// Create HTTP server
-const server = http.createServer(app);
+// // Create HTTP server
+// const server = http.createServer(app);
 
-// Initialize Socket.IO
-export const io = new Server(server, {
-  cors: {
-    origin: [
-      "http://localhost:5173",
-      /\.vercel\.app$/ // allow all vercel previews
-    ],
-    methods: ["GET", "POST"],
-    credentials: true
-  }
-});
+// // Initialize Socket.IO
+// export const io = new Server(server, {
+//   cors: {
+//     origin: [
+//       "http://localhost:5173",
+//       /\.vercel\.app$/ // allow all vercel previews
+//     ],
+//     methods: ["GET", "POST"],
+//     credentials: true
+//   }
+// });
 
-// Store online users
-const onlineUsers = new Map();
+// // Store online users
+// const onlineUsers = new Map();
 
-// Socket connection
-io.on('connection', (socket) => {
-  console.log('🔌 User connected:', socket.id);
+// // Socket connection
+// io.on('connection', (socket) => {
+//   console.log('🔌 User connected:', socket.id);
 
-  // User joins their personal room
-  socket.on('join', (userId) => {
-    socket.join(userId);
-    onlineUsers.set(userId, socket.id);
+//   // User joins their personal room
+//   socket.on('join', (userId) => {
+//     socket.join(userId);
+//     onlineUsers.set(userId, socket.id);
 
-    console.log(`User ${userId} joined their room`);
-  });
+//     console.log(`User ${userId} joined their room`);
+//   });
 
-  // Optional: typing indicator (we’ll use later)
-  socket.on('typing', ({ toUserId }) => {
-    socket.to(toUserId).emit('typing', true);
-  });
+//   // Optional: typing indicator (we’ll use later)
+//   socket.on('typing', ({ toUserId }) => {
+//     socket.to(toUserId).emit('typing', true);
+//   });
 
-  socket.on('stopTyping', ({ toUserId }) => {
-    socket.to(toUserId).emit('typing', false);
-  });
+//   socket.on('stopTyping', ({ toUserId }) => {
+//     socket.to(toUserId).emit('typing', false);
+//   });
 
-  socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
+//   socket.on('disconnect', () => {
+//     console.log('User disconnected:', socket.id);
 
-    // remove user from map
-    for (const [userId, id] of onlineUsers.entries()) {
-      if (id === socket.id) {
-        onlineUsers.delete(userId);
-        break;
-      }
-    }
-  });
-});
+//     // remove user from map
+//     for (const [userId, id] of onlineUsers.entries()) {
+//       if (id === socket.id) {
+//         onlineUsers.delete(userId);
+//         break;
+//       }
+//     }
+//   });
+// });
 
 // Error handler
 app.use(errorHandler);
