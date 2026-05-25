@@ -1,190 +1,121 @@
-// server.js
 import express from "express";
 import cors from "cors";
-// import http from 'http';
-// import { Server } from 'socket.io';
-// import dotenv from 'dotenv';
+import helmet from "helmet";
 
-//import the necessary routes
-//import nodemailer from 'nodemailer'; // or use your preferred email service
+import { env, isProd } from "./config/env.js";
+import { initFirebase } from "./config/firebase.js";
+
+import { requestLogger } from "./middleware/requestLogger.js";
+import { errorHandler } from "./middleware/errorHandler.js";
+import { notFound } from "./middleware/notFound.js";
+import { apiLimiter } from "./middleware/rateLimiters.js";
+
 import userRoutes from "./routes/userRoutes.js";
 import musicRoutes from "./routes/musicRoutes.js";
 import postRoutes from "./routes/postRoutes.js";
 import messageRoutes from "./routes/messageRoutes.js";
-import errorHandler from "./middleware/errorHandler.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
 
-//dotenv.config();
+import { logger } from "./utils/logger.js";
+
+initFirebase();
+
 const app = express();
 
-// ===== CORS SETTINGS =====
-const allowedOrigins = [
-  "http://localhost:3000",       // React local dev
-  "http://localhost:8100",       // Ionic React local dev
-  "https://cozie-cs.vercel.app", // client url
-  "https://cozie-kohl.vercel.app" // backend url
-];
+app.set("trust proxy", 1);
+
+const allowedOrigins = (env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+function isOriginAllowed(origin) {
+  if (allowedOrigins.includes(origin)) return true;
+  if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return true;
+  let hostname;
+  try {
+    hostname = new URL(origin).hostname;
+  } catch {
+    return false;
+  }
+  return /\.vercel\.app$/.test(hostname);
+}
 
 const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin || origin.includes("vercel.app") || origin.includes("localhost") || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("CORS not allowed"));
-    }
+  origin(origin, callback) {
+    // Non-browser requests (curl, server-to-server) have no Origin header.
+    if (!origin) return callback(null, true);
+    if (isOriginAllowed(origin)) return callback(null, true);
+    return callback(new Error(`CORS: origin ${origin} not allowed`));
   },
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   credentials: true,
-  allowedHeaders: ["Content-Type", "Authorization"]
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
 
-// // CORS configuration
-// const corsOptions = {
-//   origin: [
-//     'https://cozie-cs.vercel.app',           
-//     'http://localhost:3000',                  
-//     'http://localhost:5173',                  
-//     'https://cozie-kohl.vercel.app',          
-//   ],
-//   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-//   allowedHeaders: ['Content-Type', 'Authorization'],
-//   credentials: true,
-//   optionsSuccessStatus: 200,
-// };
+app.use(requestLogger);
+app.use(helmet());
+// cors() handles OPTIONS preflight automatically when used as global middleware
+app.use(cors(corsOptions));
 
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://cozie-cs.vercel.app');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  
-  // Handle preflight
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+
+app.use("/api", apiLimiter);
+
+app.get("/api/health", (_req, res) => {
+  res.json({
+    success: true,
+    status: "ok",
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
 });
 
-// Apply CORS middleware
-app.use(cors(corsOptions));
-// Handle preflight requests explicitly
-app.options('/*path', cors(corsOptions));
+app.get("/api/home", (_req, res) => {
+  res.json({ message: "Welcome to the user server side", status: "success" });
+});
 
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+if (!isProd) {
+  app.get("/api/test", (_req, res) => {
+    res.json({
+      success: true,
+      message: "CORS is working!",
+      timestamp: new Date().toISOString(),
+    });
+  });
+  app.post("/api/test", (req, res) => {
+    res.json({ status: "OK", received: req.body });
+  });
+}
 
-// Routes
 app.use("/api/users", userRoutes);
 app.use("/api/music", musicRoutes);
 app.use("/api/posts", postRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/notifications", notificationRoutes);
 
-app.get("/api/home", (req, res) => {
-  res.json({
-    message: "Welcome to the user server side",
-    status: "success"
-  });
-});
-
-app.get('/api/test-email', async (req, res) => {
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
-
-  try {
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: 'fredottache@gmail.com', // send to yourself
-      subject: 'Test',
-      text: 'If you see this, email works!',
-    });
-    res.send('Email sent');
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Email failed: ' + err.message);
-  }
-});
-
-app.get('/api/test', (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'CORS is working!',
-    timestamp: new Date().toISOString()
-  });
-});
-
-app.post("/api/test", (req, res) => {
-  console.log("Received:", req.body);
-  res.json({
-    status: "OK",
-    received: req.body
-  });
-});
-
-// Catch-all for 404 - use named wildcard
-app.use('/*path', (req, res) => {
-  res.status(404).json({ success: false, message: 'Route not found' });
-});
-
-// // Create HTTP server
-// const server = http.createServer(app);
-
-// // Initialize Socket.IO
-// export const io = new Server(server, {
-//   cors: {
-//     origin: [
-//       "http://localhost:5173",
-//       /\.vercel\.app$/ // allow all vercel previews
-//     ],
-//     methods: ["GET", "POST"],
-//     credentials: true
-//   }
-// });
-
-// // Store online users
-// const onlineUsers = new Map();
-
-// // Socket connection
-// io.on('connection', (socket) => {
-//   console.log('🔌 User connected:', socket.id);
-
-//   // User joins their personal room
-//   socket.on('join', (userId) => {
-//     socket.join(userId);
-//     onlineUsers.set(userId, socket.id);
-
-//     console.log(`User ${userId} joined their room`);
-//   });
-
-//   // Optional: typing indicator (we’ll use later)
-//   socket.on('typing', ({ toUserId }) => {
-//     socket.to(toUserId).emit('typing', true);
-//   });
-
-//   socket.on('stopTyping', ({ toUserId }) => {
-//     socket.to(toUserId).emit('typing', false);
-//   });
-
-//   socket.on('disconnect', () => {
-//     console.log('User disconnected:', socket.id);
-
-//     // remove user from map
-//     for (const [userId, id] of onlineUsers.entries()) {
-//       if (id === socket.id) {
-//         onlineUsers.delete(userId);
-//         break;
-//       }
-//     }
-//   });
-// });
-
-// Error handler
+app.use(notFound);
 app.use(errorHandler);
 
-// Start server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const server = app.listen(env.PORT, () => {
+  logger.info({ port: env.PORT, env: env.NODE_ENV }, "Server listening");
+});
+
+function shutdown(signal) {
+  logger.info({ signal }, "Shutting down server");
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 10_000).unref();
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("unhandledRejection", (reason) => {
+  logger.error({ reason }, "Unhandled promise rejection");
+});
+process.on("uncaughtException", (err) => {
+  logger.fatal({ err }, "Uncaught exception, exiting");
+  process.exit(1);
+});
+
+export { app };

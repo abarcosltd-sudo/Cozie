@@ -1,45 +1,34 @@
-// middleware/authMiddleware.js
-import jwt from "jsonwebtoken";
-import { db } from "../config/firebase.js"; // Using Firebase instead of Mongoose
+import { AppError } from "../utils/AppError.js";
+import { verifyAuthToken } from "../utils/auth.js";
+import { userRepository } from "../repositories/userRepository.js";
 
-export const protect = async (req, res, next) => {
+function extractBearer(req) {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith("Bearer ")) return null;
+  return header.slice("Bearer ".length).trim() || null;
+}
+
+export function protect(req, _res, next) {
+  const token = extractBearer(req);
+  if (!token) return next(AppError.unauthorized("No token provided"));
+
   try {
-    let token;
-
-    if (
-      req.headers.authorization &&
-      req.headers.authorization.startsWith("Bearer")
-    ) {
-      token = req.headers.authorization.split(" ")[1];
-    }
-
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: "Not authorized, no token",
-      });
-    }
-
-    // Verify JWT
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Fetch user from Firestore
-    const userDoc = await db.collection("users").doc(decoded.id).get();
-
-    if (!userDoc.exists) {
-      return res.status(401).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    req.user = userDoc.data();
+    const decoded = verifyAuthToken(token);
+    req.auth = { id: decoded.id, raw: decoded };
     next();
-  } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: "Not authorized",
-    });
+  } catch {
+    next(AppError.unauthorized("Invalid or expired token"));
   }
-};
+}
 
+export async function loadUser(req, _res, next) {
+  if (!req.auth?.id) return next(AppError.unauthorized());
+  try {
+    const user = await userRepository.findById(req.auth.id);
+    if (!user) return next(AppError.unauthorized("User not found"));
+    req.user = user;
+    next();
+  } catch (err) {
+    next(err);
+  }
+}

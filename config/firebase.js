@@ -1,59 +1,76 @@
-// config/firebase.js
 import admin from "firebase-admin";
+import { env } from "./env.js";
 
-// ----- BACKEND FIREBASE PROJECT (your main backend) -----
-const backendServiceAccount = {
-  type: "service_account",
-  project_id: process.env.FIREBASE_PROJECT_ID,
-  private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-  private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-  client_email: process.env.FIREBASE_CLIENT_EMAIL,
-  client_id: process.env.FIREBASE_CLIENT_ID,
-};
+let firestoreInstance = null;
+let frontendBucketInstance = null;
 
-// Initialize main backend Firebase Admin app (if not already)
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(backendServiceAccount),
-  });
+function buildBackendServiceAccount() {
+  return {
+    type: "service_account",
+    project_id: env.FIREBASE_PROJECT_ID,
+    private_key_id: env.FIREBASE_PRIVATE_KEY_ID,
+    private_key: env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    client_email: env.FIREBASE_CLIENT_EMAIL,
+    client_id: env.FIREBASE_CLIENT_ID,
+  };
 }
 
-const db = admin.firestore();
-//const bucket = admin.storage().bucket(); // backend storage (may be null if no bucket set)
-
-// ----- FRONTEND FIREBASE PROJECT (for signed URLs) -----
-let frontendBucket = null;
-
-if (process.env.FRONTEND_FIREBASE_SERVICE_ACCOUNT) {
+function tryInitFrontendBucket() {
+  if (!env.FRONTEND_FIREBASE_SERVICE_ACCOUNT) {
+    return null;
+  }
   try {
-    const frontendServiceAccount = JSON.parse(process.env.FRONTEND_FIREBASE_SERVICE_ACCOUNT);
+    const serviceAccount = JSON.parse(env.FRONTEND_FIREBASE_SERVICE_ACCOUNT);
+    const bucketName =
+      env.FRONTEND_STORAGE_BUCKET || `${serviceAccount.project_id}.appspot.com`;
 
-    // Determine bucket name: use env var or fallback to <project_id>.appspot.com
-    const frontendBucketName = process.env.FRONTEND_STORAGE_BUCKET || 
-                               `${frontendServiceAccount.project_id}.appspot.com`;
-
-    if (!frontendBucketName) {
-      throw new Error('Could not determine frontend storage bucket name.');
-    }
-
-    // Initialize a separate Firebase Admin app for the frontend project
     const frontendApp = admin.initializeApp(
       {
-        credential: admin.credential.cert(frontendServiceAccount),
-        storageBucket: frontendBucketName,
+        credential: admin.credential.cert(serviceAccount),
+        storageBucket: bucketName,
       },
-      "frontend" // unique name to avoid conflict with default app
+      "frontend"
     );
 
-    // Get the bucket
-    frontendBucket = admin.storage(frontendApp).bucket(frontendBucketName);
-    console.log(`Frontend Firebase Storage initialized with bucket: ${frontendBucketName}`);
-  } catch (error) {
-    console.error("Failed to initialize frontend Firebase project:", error.message);
-    // frontendBucket remains null – endpoints must handle this gracefully
+    return admin.storage(frontendApp).bucket(bucketName);
+  } catch (err) {
+    console.error(
+      "Failed to initialise frontend Firebase project:",
+      err.message
+    );
+    return null;
   }
-} else {
-  console.warn("⚠️ FRONTEND_FIREBASE_SERVICE_ACCOUNT not set. Frontend storage not available.");
 }
 
-export { db, frontendBucket };
+export function initFirebase() {
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert(buildBackendServiceAccount()),
+    });
+  }
+  firestoreInstance = admin.firestore();
+  frontendBucketInstance = tryInitFrontendBucket();
+  return { db: firestoreInstance, frontendBucket: frontendBucketInstance };
+}
+
+export function db() {
+  if (!firestoreInstance) {
+    throw new Error(
+      "Firebase has not been initialised. Call initFirebase() during startup."
+    );
+  }
+  return firestoreInstance;
+}
+
+export function frontendBucket() {
+  return frontendBucketInstance;
+}
+
+export function requireFrontendBucket() {
+  if (!frontendBucketInstance) {
+    throw new Error(
+      "Frontend Firebase Storage bucket is not configured. Set FRONTEND_FIREBASE_SERVICE_ACCOUNT."
+    );
+  }
+  return frontendBucketInstance;
+}
