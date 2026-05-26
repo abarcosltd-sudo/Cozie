@@ -1,43 +1,56 @@
 /**
  * Vercel serverless entrypoint.
  *
- * Vercel's api/ filesystem routing turns this file into a function — every
- * request rewritten here is handed to our default export, the existing
- * Express app (mounted in ../server.js). Local / Docker / node server.js
- * workflows are unchanged.
+ * Intentionally minimal and synchronous at module load — no top-level await,
+ * no top-level imports of our app code. We lazy-load ../server.js on the
+ * very first request and cache the result for the lifetime of the container.
  *
- * The dynamic import + try/catch is deliberate: if any downstream module has
- * a syntax error or a config-time crash (Firebase env, etc.), Node's native
- * error message — including the offending file path and line — will land in
- * Vercel's runtime logs. The function then degrades to a 500 responder so
- * health-checking platforms aren't misled by silent crashes.
+ * Reason: Vercel's @vercel/node wrapping has historically interacted badly
+ * with top-level await on some Node patch versions. Loading lazily inside
+ * the request handler means any module-resolution / parse error is caught,
+ * logged with a full stack (so Vercel's runtime logs name the offending
+ * file:line:col), and surfaced to the client as a JSON 500 — instead of
+ * crashing the function with a stack we can't read.
+ *
+ * Local / Docker / node server.js keeps using server.js directly.
  */
 
-let app;
+let cachedApp = null;
 let bootError = null;
 
-try {
-  const mod = await import("../server.js");
-  app = mod.default;
-  if (typeof app !== "function") {
-    throw new Error(
-      Loaded ../server.js but default export is ${typeof app}, expected function
-    );
+async function loadApp() {
+  if (cachedApp) return cachedApp;
+  if (bootError) return null;
+  try {
+    const mod = await import("../server.js");
+    if (typeof mod.default !== "function") {
+      throw new Error(
+        Expected default export of server.js to be a function, got ${typeof mod.default}
+      );
+    }
+    cachedApp = mod.default;
+    return cachedApp;
+  } catch (err) {
+    bootError = err;
+    // Log loudly so Vercel runtime logs surface the underlying file:line.
+    console.error("[api/index] Failed to load ../server.js");
+    console.error(err);
+    if (err && err.stack) console.error(err.stack);
+    return null;
   }
-} catch (err) {
-  bootError = err;
-  // Log loudly so the message + file path show up in Vercel's runtime logs.
-  console.error("[api/index] Failed to load server.js. Underlying error:");
-  console.error(err);
-  if (err?.stack) console.error(err.stack);
+}
 
-  app = (req, res) => {
+export default async function handler(req, res) {
+  const app = await loadApp();
+  if (!app) {
     res.status(500).json({
       success: false,
       error: "Backend boot failed",
-      message: bootError?.message || String(bootError),
+      message: (bootError && bootError.message) || String(bootError),
+      // Stack helps debugging on staging; strip in prod hardening later.
+      stack: (bootError && bootError.stack) || null,
     });
-  };
+    return;
+  }
+  return app(req, res);
 }
-
-export default app;
