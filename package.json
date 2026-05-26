@@ -1,37 +1,38 @@
 {
-  "name": "cozie",
+  "name": "cozie-backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "Cozie backend API (Node.js + Express + Firestore)",
   "main": "server.js",
+  "type": "module",
   "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "backfill": "node scripts/backfill.js",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module",
   "dependencies": {
     "@sendgrid/mail": "^7.7.0",
-    "bcryptjs": "2.4.3",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
+    "dotenv": "^16.4.5",
     "express": "^5.1.0",
-    "firebase": "^12.6.0",
-    "firebase-admin": "^11.11.1",
+    "express-rate-limit": "^7.4.0",
+    "firebase-admin": "^12.7.0",
+    "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
-    "mongodb": "^7.0.0",
-    "mongoose": "^8.20.0",
-    "multer": "^1.4.5-lts.1",
-    "nodemailer": "^6.9.7",
-    "nodemon": "^3.1.11",
-    "uuid": "^9.0.1"
+    "pino": "^9.5.0",
+    "pino-http": "^10.3.0",
+    "uuid": "^9.0.1",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
-    "@types/jsonwebtoken": "^9.0.5",
-    "@types/nodemailer": "^6.4.14",
-    "@types/uuid": "^9.0.8"
+    "nodemon": "^3.1.7",
+    "pino-pretty": "^11.2.2"
   }
 }
