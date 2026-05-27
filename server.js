@@ -46,7 +46,7 @@ const corsOptions = {
     // Non-browser requests (curl, server-to-server) have no Origin header.
     if (!origin) return callback(null, true);
     if (isOriginAllowed(origin)) return callback(null, true);
-    return callback(new Error(CORS: origin ${origin} not allowed));
+    return callback(new Error(`CORS: origin ${origin} not allowed`));
   },
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   credentials: true,
