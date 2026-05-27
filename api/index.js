@@ -25,7 +25,7 @@ async function loadApp() {
     const mod = await import("../server.js");
     if (typeof mod.default !== "function") {
       throw new Error(
-        Expected default export of server.js to be a function, got ${typeof mod.default}
+        `Expected default export of server.js to be a function, got ${typeof mod.default}`
       );
     }
     cachedApp = mod.default;
