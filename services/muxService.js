@@ -135,6 +135,54 @@ export const muxService = {
   },
 
   /**
+   * Fetch a Mux Asset by id. Returns the raw SDK object on success, `null`
+   * if Mux returns 404. All other errors bubble up as `AppError.internal`
+   * so the reconcile path surfaces them cleanly to the caller.
+   *
+   * Used by the reconcile flow as the authoritative source of truth when
+   * the `video.asset.ready` webhook never landed (a stuck-reel rescue
+   * path). Mirrors the field shape `muxWebhookController#handleAssetReady`
+   * reads from webhook event payloads, so the same patching logic can
+   * consume either.
+   */
+  async getAsset(assetId) {
+    if (!assetId) return null;
+    try {
+      const asset = await getClient().video.assets.retrieve(assetId);
+      return asset || null;
+    } catch (err) {
+      if (err?.status === 404) return null;
+      logger.warn(
+        { err: err.message, assetId },
+        "Mux getAsset failed"
+      );
+      throw AppError.internal(`Mux getAsset failed: ${err.message}`);
+    }
+  },
+
+  /**
+   * Fetch a Mux Upload by id. Returns the raw SDK object on success, `null`
+   * if Mux returns 404. The Upload's `asset_id` field is populated once
+   * Mux finishes ingesting the bytes — useful when a reel is stuck in
+   * `pending_upload` because the `video.upload.asset_created` webhook
+   * never landed.
+   */
+  async getUpload(uploadId) {
+    if (!uploadId) return null;
+    try {
+      const upload = await getClient().video.uploads.retrieve(uploadId);
+      return upload || null;
+    } catch (err) {
+      if (err?.status === 404) return null;
+      logger.warn(
+        { err: err.message, uploadId },
+        "Mux getUpload failed"
+      );
+      throw AppError.internal(`Mux getUpload failed: ${err.message}`);
+    }
+  },
+
+  /**
    * Hard-delete an asset on Mux. Used when:
    *   - the over-duration enforcement path rejects a clip
    *   - (future) the author deletes their own reel

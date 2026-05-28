@@ -45,10 +45,14 @@ the build is `Enabled`.
 |---|---|---|---|
 | 1 | `reels` | `status` ASC, `createdAt` DESC | `reelRepository.listRecent` — Discover feed (`GET /api/reels/discover`) |
 | 2 | `reels` | `userId` ASC, `status` ASC, `createdAt` DESC | `reelRepository.listByUserId` (non-author viewer) — `GET /api/reels/user/{userId}` AND `reelRepository.listRecentByUserIds` — Following feed (`GET /api/reels/feed`). Firestore satisfies both `where userId == X` and `where userId in [...]` with the same composite index. |
+| 3 | `reels` | `userId` ASC, `createdAt` DESC | `reelRepository.listByUserId` (author viewing own profile, `viewerIsAuthor === true`) — `GET /api/reels/user/{userId}` when the viewer is the author. Skips the `status` equality filter so processing/errored/pending uploads are visible to the author. |
 
-Author-viewing-own-reels uses `where('userId','==',X).orderBy('createdAt','desc')`,
-which Firestore satisfies with the auto-created single-field index on
-`createdAt` — no composite index required.
+> ⚠ A previous version of this doc claimed the author-own-profile query could
+> be satisfied by Firestore's auto-created single-field index on `createdAt`.
+> That was wrong: any query combining a `where` filter with an `orderBy` on a
+> different field requires an explicit composite index. The fix is index #3
+> above; without it, every `GET /api/reels/user/{userId}` where the viewer is
+> the author 500s with `FAILED_PRECONDITION`.
 
 ## Adding a new query
 

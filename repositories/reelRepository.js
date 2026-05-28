@@ -116,9 +116,14 @@ export const reelRepository = {
    * is true (set by the controller), processing and errored reels are
    * included too so the author can see their own in-flight uploads.
    *
-   * Requires a composite index on (userId asc, status asc, createdAt desc)
-   * for the public view and (userId asc, createdAt desc) for the author
-   * view.
+   * Requires TWO composite indexes (both declared in
+   * `firestore.indexes.json`):
+   *   - public view  → (userId asc, status asc, createdAt desc)
+   *   - author view  → (userId asc, createdAt desc)
+   *
+   * The author-view index is mandatory; Firestore does NOT auto-satisfy
+   * `where('userId','==',X).orderBy('createdAt','desc')` from single-field
+   * indexes alone — that combination needs an explicit composite index.
    */
   async listByUserId(
     userId,

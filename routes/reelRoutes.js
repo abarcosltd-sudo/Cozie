@@ -7,6 +7,7 @@ import {
   reelCommentLimiter,
   reelViewLimiter,
   reelShareLimiter,
+  reelReconcileLimiter,
 } from "../middleware/rateLimiters.js";
 import {
   createReelSchema,
@@ -29,6 +30,7 @@ import {
   addReelComment,
   registerView,
   shareReel,
+  reconcileReel,
 } from "../controllers/reelController.js";
 import { handleMuxWebhook } from "../controllers/muxWebhookController.js";
 
@@ -127,6 +129,17 @@ router.post(
   reelShareLimiter,
   validate({ params: reelIdParamSchema, body: shareReelSchema }),
   shareReel
+);
+
+/* Reconcile from Mux — backstop for stuck reels when the webhook didn't
+ * deliver. Author-only (enforced in the service); rate-limited because
+ * each call costs Mux API quota. */
+router.post(
+  "/:reelId/reconcile",
+  protect,
+  reelReconcileLimiter,
+  validate({ params: reelIdParamSchema }),
+  reconcileReel
 );
 
 router.get(
