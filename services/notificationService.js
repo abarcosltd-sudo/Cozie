@@ -214,6 +214,60 @@ export const notificationService = {
     });
   },
 
+  // --- Reel notifications --------------------------------------------------
+  // Mirror the post-like / post-comment shape. Reel likes dedup on toggle so
+  // rapid like/unlike doesn't bloat the inbox; reel comments are unique
+  // events (one notif per comment, auto-id).
+
+  async emitReelLike({ actorUser, reel }) {
+    if (!actorUser?.id || !reel?.userId) return null;
+    return emit({
+      recipientUserId: reel.userId,
+      id: dedupId(NOTIFICATION_TYPES.REEL_LIKE, actorUser.id, reel.id),
+      payload: {
+        type: NOTIFICATION_TYPES.REEL_LIKE,
+        actorId: actorUser.id,
+        actorName: actorDisplayName(actorUser),
+        actorAvatarUrl: actorUser.photoURL || null,
+        targetType: "reel",
+        targetId: reel.id,
+        snapshot: {
+          thumbnailUrl: reel.thumbnailUrl || null,
+          songTitle: reel.songSnapshot?.title || null,
+        },
+      },
+    });
+  },
+
+  async withdrawReelLike({ actorUserId, reel }) {
+    if (!reel?.userId) return null;
+    return withdraw({
+      recipientUserId: reel.userId,
+      id: dedupId(NOTIFICATION_TYPES.REEL_LIKE, actorUserId, reel.id),
+    });
+  },
+
+  async emitReelComment({ actorUser, reel, commentId, commentText }) {
+    if (!actorUser?.id || !reel?.userId) return null;
+    return emit({
+      recipientUserId: reel.userId,
+      id: `${NOTIFICATION_TYPES.REEL_COMMENT}__${commentId}`,
+      payload: {
+        type: NOTIFICATION_TYPES.REEL_COMMENT,
+        actorId: actorUser.id,
+        actorName: actorDisplayName(actorUser),
+        actorAvatarUrl: actorUser.photoURL || null,
+        targetType: "reel",
+        targetId: reel.id,
+        snapshot: {
+          commentId,
+          commentText: (commentText || "").slice(0, 240),
+          thumbnailUrl: reel.thumbnailUrl || null,
+        },
+      },
+    });
+  },
+
   // ---- Read-side ---------------------------------------------------------
 
   async list(userId, { cursor, limit, unreadOnly } = {}) {

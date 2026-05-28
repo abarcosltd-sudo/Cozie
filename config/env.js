@@ -26,6 +26,13 @@ const envSchema = z.object({
 
   ALLOWED_ORIGINS: z.string().optional(),
 
+  // Mux video pipeline (reels). All optional so the server boots in
+  // environments where reels aren't enabled; muxService throws at request
+  // time if any are missing when actually invoked.
+  MUX_TOKEN_ID: z.string().min(1).optional(),
+  MUX_TOKEN_SECRET: z.string().min(1).optional(),
+  MUX_WEBHOOK_SECRET: z.string().min(1).optional(),
+
   RATE_LIMIT_AUTH_WINDOW_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
   RATE_LIMIT_AUTH_MAX: z.coerce.number().int().positive().default(20),
   RATE_LIMIT_API_WINDOW_MS: z.coerce.number().int().positive().default(60 * 1000),

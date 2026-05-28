@@ -7,7 +7,7 @@ A granular tracking document mapping the `Cozie/` backend implementation against
 - `[~]` Partially done — needs work (see note).
 - `[ ]` Not started.
 
-**Snapshot:** roughly **57%** of backend scope from the SRS (101 of 228 granular items checked). Architectural pass complete: layered services/repositories/validators, single auth/CORS, zod validation, pino logging, helmet + rate-limit, AppError + asyncHandler. Audit fixes shipped (round 1): idempotent favorites, deterministic conversation IDs, post-like no longer mutates song.likeCount, batch-chunked read receipts, safer CORS origin parser, validator merges params. Bug-fix phase shipped (round 2): transactional toggle likes, denormalized reverse like-index (no more catalog scans), batched feed fan-out via getAll, case-insensitive search, bcrypt-hashed OTPs, idempotent backfill script. Social-graph slice shipped (round 3): atomic follow/unfollow with denormalized counters, cursor-paginated follower/following lists, follow-status one-RPC check, `/api/posts/feed` is now follower-filtered with `/explore` for discovery. Notifications slice shipped (round 4): in-app notification subcollection w/ dedup IDs + denormalized unread counter, wired into follow/like/comment writes as best-effort post-tx side-effects, full `/api/notifications` CRUD.
+**Snapshot:** roughly **60%** of backend scope from the SRS (108 of 228 granular items checked). Architectural pass complete: layered services/repositories/validators, single auth/CORS, zod validation, pino logging, helmet + rate-limit, AppError + asyncHandler. Audit fixes shipped (round 1): idempotent favorites, deterministic conversation IDs, post-like no longer mutates song.likeCount, batch-chunked read receipts, safer CORS origin parser, validator merges params. Bug-fix phase shipped (round 2): transactional toggle likes, denormalized reverse like-index (no more catalog scans), batched feed fan-out via getAll, case-insensitive search, bcrypt-hashed OTPs, idempotent backfill script. Social-graph slice shipped (round 3): atomic follow/unfollow with denormalized counters, cursor-paginated follower/following lists, follow-status one-RPC check, `/api/posts/feed` is now follower-filtered with `/explore` for discovery. Notifications slice shipped (round 4): in-app notification subcollection w/ dedup IDs + denormalized unread counter, wired into follow/like/comment writes as best-effort post-tx side-effects, full `/api/notifications` CRUD. Reels slice shipped (round 5): Mux-backed video pipeline with direct-upload URLs and HMAC-verified webhooks, top-level `reels` collection with `pending_upload → processing → ready/errored` state machine, post-upload 60s duration enforcement, full engagement (likes/comments/views/shares) with the same atomic-tx + reverse-index + best-effort-notification posture as posts.
 
 > Each bar is 10 cells wide. When you tick or untick an item below, also update the count and bar in the matching row here so this dashboard stays in sync.
 
@@ -15,7 +15,7 @@ A granular tracking document mapping the `Cozie/` backend implementation against
 
 | § | Section                          | Progress                  | Done   |
 |---|----------------------------------|---------------------------|--------|
-| — | **Overall**                      | `▰▰▰▰▰▱▱▱▱▱`              | 101/228 |
+| — | **Overall**                      | `▰▰▰▰▰▰▱▱▱▱`              | 108/228 |
 | 1 | Project infrastructure & ops     | `▰▰▰▰▰▰▰▰▰▱`              | 17/20  |
 | 2 | Authentication & accounts        | `▰▰▰▰▰▰▱▱▱▱`              | 10/16  |
 | 3 | User profile                     | `▰▰▰▰▰▰▱▱▱▱`              | 7/12   |
@@ -27,7 +27,7 @@ A granular tracking document mapping the `Cozie/` backend implementation against
 | 9 | Artist Communities ("Bubbles")   | `▱▱▱▱▱▱▱▱▱▱`              | 0/8    |
 | 10| Battle Rooms                     | `▱▱▱▱▱▱▱▱▱▱`              | 0/11   |
 | 11| Music-taste Matchmaking          | `▱▱▱▱▱▱▱▱▱▱`              | 0/8    |
-| 12| Reels                            | `▱▱▱▱▱▱▱▱▱▱`              | 0/7    |
+| 12| Reels                            | `▰▰▰▰▰▰▰▰▰▰`              | 7/7    |
 | 13| Listening data ingestion         | `▱▱▱▱▱▱▱▱▱▱`              | 0/7    |
 | 14| Notifications                    | `▰▰▰▰▱▱▱▱▱▱`              | 2/5    |
 | 15| Premium tier & payments          | `▱▱▱▱▱▱▱▱▱▱`              | 0/9    |
@@ -244,13 +244,31 @@ A granular tracking document mapping the `Cozie/` backend implementation against
 
 ## 12. Reels (SRS 1.1, alg-step 8)
 
-- [ ] `reels` collection / data model
-- [ ] Signed-URL upload for short video / audio
-- [ ] `POST /api/reels` — create reel
-- [ ] `GET /api/reels/discover` — public reel feed
-- [ ] `GET /api/reels/user/:userId` — user's reels
-- [ ] Reel likes / comments / shares
-- [ ] View-count tracking
+- [x] `reels` collection / data model — top-level `reels`, subcollections for `likes` / `comments` / `views`, reverse-index `users/{uid}/likedReels`, status enum `pending_upload | processing | ready | errored`, denormalized engagement counters
+- [x] Signed-URL upload for short video — Mux direct uploads (`mux.video.uploads.create` with `passthrough=reelId`); audio component bundled in the video
+- [x] `POST /api/reels` — creates doc + returns `{ reelId, uploadId, uploadUrl }` in one call so the client uploads directly to Mux
+- [x] `GET /api/reels/discover` — public reel feed, cursor-paginated, filters `status==ready`
+- [x] `GET /api/reels/user/:userId` — user's reels, cursor-paginated; author sees their own processing/errored docs
+- [x] Reel likes / comments / shares — atomic toggle-like (tx over reel doc + likeRef + reverse index), cursor-paginated comments with `commentCount` increment, share counter with `arrayUnion` of platforms
+- [x] View-count tracking — `POST /:reelId/view`, idempotent per (reel, viewer); only first view bumps `viewCount`, subsequent calls refresh per-user `lastViewedAt`/`count`
+
+### Beyond the SRS line items (shipped in the same slice)
+
+- [x] `POST /api/reels/webhooks/mux` — HMAC-verified via `MUX_WEBHOOK_SECRET`, dispatches on `video.upload.asset_created` / `video.asset.ready` / `video.asset.errored` / `video.upload.cancelled` / `video.upload.errored`. Raw bytes captured by a `verify` callback on `express.json()` so the signature stays valid. Always returns 200 on lookup misses to prevent Mux retry storms.
+- [x] `GET /api/reels/feed` — following-filtered feed via chunked `where userId in` fan-out (mirrors `/api/posts/feed`)
+- [x] `GET /api/reels/:reelId` — single reel for deep links; author-only visibility while non-ready
+- [x] `POST /api/reels/:reelId/share` — `FieldValue.increment(shareCount, 1)` + `arrayUnion(platforms)`
+- [x] Post-upload duration enforcement — `video.asset.ready` handler deletes any asset >60s via `mux.video.assets.delete` and flips reel to `errored` with reason
+
+### Deferred (tracked here so the slice stays honest)
+
+- [ ] Signed playback URLs — switch `playback_policy` to `signed` + JWT minting per request
+- [ ] MP4 downloads — Mux `mp4_support: "standard"` on asset settings
+- [ ] Mux Data analytics SDK on the frontend
+- [ ] Orphan-GC job for reels stuck in `pending_upload` > 24h (needs Cloud Scheduler)
+- [ ] Edit / delete own reel (delete must also call `muxService.deleteAsset`)
+- [ ] Visibility levels beyond `public` (followers-only, private)
+- [ ] Cursor pagination on `/reels/feed` (fixed top-N window in v1 — same compromise as `/posts/feed`)
 
 ---
 
@@ -436,3 +454,39 @@ Three endpoints added so the frontend's profile surfaces work for any user, not 
 - [x] `GET /api/users/:userId/liked-songs` — liked songs for any user (reuses existing `musicService.listUserLikedSongs`).
 
 These previously 404'd from the frontend. Visibility gating (private accounts) is deferred to a future feature pass — keeping parity with the existing followers/following endpoints, which also read public data.
+
+### Reels slice (round 5) — shipped
+
+End-to-end Reels feature delivered against [`../REELS_FEATURE_SPEC.md`](../REELS_FEATURE_SPEC.md) and the round-5 plan. Eleven endpoints, one webhook, Mux-backed video pipeline. Highlights:
+
+- **New module**: `services/muxService.js` — thin wrapper around `@mux/mux-node` (lazy client, `createDirectUpload` / `unwrapWebhook` / `deleteAsset`). Nothing else in the codebase imports the SDK so a future provider swap is a one-file change.
+- **State machine**: `pending_upload → processing → ready | errored` on the reel doc, driven by webhooks (`video.upload.asset_created`, `video.asset.ready`, etc.). The doc exists from the very first request so orphaned uploads (client closes app before PUT) are easy to GC.
+- **Passthrough lookup**: every Mux upload carries the reel id as `passthrough`, so the webhook handler resolves to the right doc in O(1) — no index query, no race with delivery order. Fallbacks via `findByMuxUploadId` / `findByMuxAssetId` cover edge cases.
+- **HMAC verification**: `express.json({ verify })` in `server.js` captures the raw request bytes onto `req.rawBody` so signature verification works without re-stringifying the JSON. Standard pattern, also usable for any future webhook provider.
+- **Duration enforcement**: Mux doesn't enforce upload-time duration. The `video.asset.ready` handler reads `data.duration`, and if it exceeds 60s, calls `muxService.deleteAsset` and flips the reel to `errored` — so we don't pay storage on over-limit clips.
+- **Reuses the proven feed-hydration pattern**: one `db().getAll(...authorRefs, ...viewerLikeRefs)` per feed page — same O(1)-RPCs-per-page approach as `musicPostService.hydrateFeedPosts`.
+- **Engagement parity with posts**: atomic toggle-like over reel doc + likeRef + `users/{uid}/likedReels/{reelId}` reverse index, `commentCount` increment, `notificationService.emitReelLike` / `withdrawReelLike` / `emitReelComment` fired outside the source transaction.
+- **Idempotent view counter**: first view per (reel, viewer) bumps `viewCount`; subsequent calls only refresh per-user `lastViewedAt`/`count` so loop replays and refresh spam can't inflate the public counter — same pattern as favorites.
+- **Required env vars** (all `.optional()` so non-reels environments boot): `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET`, `MUX_WEBHOOK_SECRET`.
+- **Required Firestore composite indexes** (declared in [`firestore.indexes.json`](./firestore.indexes.json), deployed via `firebase deploy --only firestore:indexes`): `reels (status asc, createdAt desc)` for discover, `reels (userId asc, status asc, createdAt desc)` for user lists AND feed fan-out (Firestore satisfies both `where userId == X` and `where userId in [...]` with the same composite index). Author-viewing-own-reels uses single-field auto-indexes. Full deploy / new-query workflow documented in [`FIRESTORE_INDEXES.md`](./FIRESTORE_INDEXES.md).
+
+#### Round-5 post-implementation audit (line-by-line vs spec)
+
+Audited each section of `REELS_FEATURE_SPEC.md` against the merged code. Four gaps surfaced and were fixed in the same slice:
+
+- [x] **`errorReason` codes** — webhook handler and the service-layer Mux-unavailable path now write a machine-readable `errorReason` (`upload_cancelled`, `upload_errored`, `processing_failed`, `exceeds_max_duration`, `no_playback_id`, `mux_unavailable`) alongside the human-readable `errorMessage`. The public reel response surfaces both so the frontend can branch on outcome without parsing English.
+- [x] **`uploadExpiresAt` in create response** — `muxService.createDirectUpload` now returns an ISO timestamp (`now + 3600s`) and `reelService.create` threads it through to the `POST /api/reels` response, matching spec section 9.1.
+- [x] **Per-endpoint per-user rate limits** — five new limiters in `middleware/rateLimiters.js` (`reelCreateLimiter` 10/hr, `reelLikeLimiter` 60/min, `reelCommentLimiter` 20/min, `reelViewLimiter` 600/min, `reelShareLimiter` 30/min) keyed on `req.auth.id` with IP fallback. Wired into the matching routes AFTER `protect`. The global `apiLimiter` still applies on top for traffic shaping.
+- [x] **Mux secrets redaction** — `utils/logger.js` redact paths extended with `req.headers['mux-signature']`, `*.MUX_TOKEN_SECRET`, `*.MUX_WEBHOOK_SECRET`, `*.muxTokenSecret`, `*.muxWebhookSecret`, `*.tokenSecret`, `*.webhookSecret`. Purely defensive — no call site currently logs these — but cheap insurance.
+
+#### Post-review blocker fixes (round-5 PR review)
+
+Two blockers surfaced during PR review and were fixed in the same slice:
+
+- [x] **`recordShare` stale-read response** — service was using `FieldValue.increment(1)` for the persisted counter (correct) but computing the response value from a pre-read snapshot (`(reel.shareCount || 0) + 1`), so concurrent shares returned non-monotonic numbers to clients while the stored counter was correct. Rewrote `reelService.recordShare` as a single Firestore transaction over the reel doc — reads `shareCount`, writes `shareCount + 1` plus the platforms `arrayUnion`, returns the post-increment value. Matches `toggleReelLike` / `registerView` conventions.
+- [x] **Firestore composite indexes now deployable from code** — added [`firestore.indexes.json`](./firestore.indexes.json) and a minimal [`firebase.json`](./firebase.json) wiring it for `firebase deploy --only firestore:indexes`. Two composite indexes: `reels (status asc, createdAt desc)` and `reels (userId asc, status asc, createdAt desc)`. Deploy / new-query workflow documented in [`FIRESTORE_INDEXES.md`](./FIRESTORE_INDEXES.md). Without this, the first prod request to discover / user-list / feed would 500 with `FAILED_PRECONDITION` until an operator manually clicked through the Firebase console.
+
+#### Two intentional deviations (documented, not fixed)
+
+- **Error envelope shape.** Spec section 9.12 specifies `{ success: false, error: { code, message } }`. Cozie's existing convention (in `middleware/errorHandler.js`) is `{ success: false, message, details }`. Adopting the spec shape for just reels would diverge from every other endpoint, so the existing shape was kept. As a result, the named `error.code` values from spec sections 9.1-9.11 (`invalid_caption`, `song_not_found`, `mux_unavailable`, `reel_not_found`, `reel_not_visible`) are detected correctly but not surfaced as machine-readable codes in the response. Adopting the nested-error shape is a cross-cutting refactor — slated for a future slice if product wants the spec shape.
+- **Following-feed cursor pagination.** Spec section 9.4 shows cursor + limit on `/api/reels/feed`. Implementation returns a fixed top-N window — the chunked `where in` fan-out across 200 follows doesn't pair cleanly with a single cursor (same compromise `/api/posts/feed` has lived with since round 3). The validator still accepts `cursor` to keep the client request shape uniform; the service ignores it. Discover (`/api/reels/discover`) remains fully cursor-paginated.
