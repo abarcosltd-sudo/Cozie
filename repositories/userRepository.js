@@ -74,6 +74,27 @@ export const userRepository = {
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   },
 
+  // --- Reels reverse index --------------------------------------------------
+  // Mirrors the likedSongs pattern: one doc per (user, reel) the user has
+  // liked, written transactionally inside `reelService.toggleReelLike` so a
+  // future "my liked reels" view is O(1) instead of a catalog scan.
+
+  likedReelsCol(userId) {
+    return usersCol().doc(userId).collection(SUBCOLLECTIONS.LIKED_REELS);
+  },
+
+  likedReelRef(userId, reelId) {
+    return this.likedReelsCol(userId).doc(reelId);
+  },
+
+  async listLikedReels(userId, limit = 200) {
+    const snap = await this.likedReelsCol(userId)
+      .orderBy("likedAt", "desc")
+      .limit(limit)
+      .get();
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  },
+
   // --- Follow graph ---------------------------------------------------------
 
   followersCol(userId) {

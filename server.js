@@ -15,6 +15,7 @@ import musicRoutes from "./routes/musicRoutes.js";
 import postRoutes from "./routes/postRoutes.js";
 import messageRoutes from "./routes/messageRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
+import reelRoutes from "./routes/reelRoutes.js";
 
 import { logger } from "./utils/logger.js";
 
@@ -58,7 +59,18 @@ app.use(helmet());
 // cors() handles OPTIONS preflight automatically when used as global middleware
 app.use(cors(corsOptions));
 
-app.use(express.json({ limit: "1mb" }));
+// `verify` captures the raw request bytes onto req.rawBody before the JSON
+// parser consumes them. Required for webhook signature verification (Mux,
+// and any future provider) where the signature is computed over the exact
+// bytes sent. Adds negligible overhead — just a Buffer reference.
+app.use(
+  express.json({
+    limit: "1mb",
+    verify: (req, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 app.use("/api", apiLimiter);
@@ -94,6 +106,7 @@ app.use("/api/music", musicRoutes);
 app.use("/api/posts", postRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/reels", reelRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
