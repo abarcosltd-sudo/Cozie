@@ -99,3 +99,16 @@ export const shareReel = asyncHandler(async (req, res) => {
   );
   return ok(res, result);
 });
+
+/**
+ * Reconcile a stuck reel against Mux's authoritative state. Author-only.
+ * Returns the same shape as `getReel` so the frontend can drop the
+ * response into its TanStack Query cache without remapping.
+ */
+export const reconcileReel = asyncHandler(async (req, res) => {
+  const result = await reelService.reconcileFromMux(
+    req.params.reelId,
+    req.auth.id
+  );
+  return ok(res, result);
+});

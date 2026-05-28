@@ -187,6 +187,168 @@ export const reelService = {
   },
 
   /**
+   * Reconcile a stuck reel against Mux's authoritative state.
+   *
+   * Use when the webhook pipeline didn't deliver — typically a reel that's
+   * stuck in `pending_upload` or `processing` even though Mux's dashboard
+   * shows the asset as `ready`. We ask Mux for the upload + asset and
+   * apply the same field updates the webhook handler would have written.
+   *
+   * Safety / authorization:
+   *   - Only the author may reconcile their own reel. Random viewers can't
+   *     force-rewrite someone else's reel even if they know the id.
+   *   - Reels that are already `ready` or `errored` are no-ops (we just
+   *     return the current state). Mux's data is the source of truth only
+   *     while the reel is still in flight.
+   *   - Network calls to Mux are wrapped in try/catch — a Mux outage
+   *     leaves the doc untouched rather than corrupting it.
+   *
+   * Returns the (possibly updated) reel doc in the public response shape.
+   * The caller-facing API mirrors `get()` so the frontend can swap it in
+   * without rewiring downstream code.
+   */
+  async reconcileFromMux(reelId, viewerId) {
+    const reel = await reelRepository.findById(reelId);
+    if (!reel) throw AppError.notFound("Reel not found");
+    if (reel.userId !== viewerId) {
+      throw AppError.forbidden("Only the author can reconcile a reel");
+    }
+
+    // Terminal states are already the source of truth; nothing to sync.
+    // Returning the public shape keeps the frontend code uniform.
+    if (
+      reel.status === REEL_STATUS.READY ||
+      reel.status === REEL_STATUS.ERRORED
+    ) {
+      return this.get(reelId, viewerId);
+    }
+
+    // Resolve a Mux Asset by walking whichever ids we have. The doc is
+    // guaranteed to have `muxUploadId` (set at create-time); `muxAssetId`
+    // only appears after `video.upload.asset_created`.
+    let asset = null;
+    if (reel.muxAssetId) {
+      asset = await muxService.getAsset(reel.muxAssetId);
+    }
+
+    let upload = null;
+    if (!asset && reel.muxUploadId) {
+      upload = await muxService.getUpload(reel.muxUploadId);
+      if (upload?.asset_id) {
+        asset = await muxService.getAsset(upload.asset_id);
+      }
+    }
+
+    // No asset yet. Look at the upload status — Mux exposes
+    // `waiting | asset_created | errored | cancelled | timed_out`.
+    if (!asset) {
+      if (upload?.status === "cancelled") {
+        await reelRepository.update(reelId, {
+          status: REEL_STATUS.ERRORED,
+          errorReason: "upload_cancelled",
+          errorMessage: "Upload was cancelled",
+          updatedAt: new Date(),
+        });
+        return this.get(reelId, viewerId);
+      }
+      if (upload?.status === "errored" || upload?.status === "timed_out") {
+        await reelRepository.update(reelId, {
+          status: REEL_STATUS.ERRORED,
+          errorReason: "upload_errored",
+          errorMessage:
+            upload?.error?.message ||
+            (upload?.status === "timed_out"
+              ? "Upload timed out before bytes arrived"
+              : "Upload failed"),
+          updatedAt: new Date(),
+        });
+        return this.get(reelId, viewerId);
+      }
+      // Still waiting for Mux to ingest. Leave the doc alone; client can
+      // poll again. We don't synthesize a transition that Mux hasn't
+      // actually made.
+      return this.get(reelId, viewerId);
+    }
+
+    // We have an asset. Patch in what we can; if it's ready, mirror the
+    // webhook's handleAssetReady logic exactly.
+    const muxAssetId = asset.id || reel.muxAssetId || null;
+
+    if (asset.status === "errored") {
+      await reelRepository.update(reelId, {
+        muxAssetId,
+        status: REEL_STATUS.ERRORED,
+        errorReason: "processing_failed",
+        errorMessage:
+          asset.errors?.messages?.[0] || "Mux processing failed",
+        updatedAt: new Date(),
+      });
+      return this.get(reelId, viewerId);
+    }
+
+    if (asset.status === "ready") {
+      const publicPlaybackId =
+        (asset.playback_ids || []).find((p) => p.policy === "public")?.id ||
+        asset.playback_ids?.[0]?.id ||
+        null;
+      const durationMs = asset.duration
+        ? Math.round(asset.duration * 1000)
+        : null;
+
+      if (!publicPlaybackId) {
+        await reelRepository.update(reelId, {
+          muxAssetId,
+          status: REEL_STATUS.ERRORED,
+          errorReason: "no_playback_id",
+          errorMessage: "Asset ready without a playback id",
+          updatedAt: new Date(),
+        });
+        return this.get(reelId, viewerId);
+      }
+
+      // Same post-upload duration enforcement the webhook handler runs.
+      // Delete the asset to stop storage charges and surface the error.
+      if (durationMs && durationMs > MAX_REEL_DURATION_MS) {
+        if (muxAssetId) await muxService.deleteAsset(muxAssetId);
+        await reelRepository.update(reelId, {
+          muxAssetId,
+          status: REEL_STATUS.ERRORED,
+          errorReason: "exceeds_max_duration",
+          errorMessage: "Reel exceeds the 60 second limit",
+          durationMs,
+          updatedAt: new Date(),
+        });
+        return this.get(reelId, viewerId);
+      }
+
+      await reelRepository.update(reelId, {
+        muxAssetId,
+        muxPlaybackId: publicPlaybackId,
+        durationMs: durationMs || null,
+        aspectRatio: asset.aspect_ratio || null,
+        thumbnailUrl: `https://image.mux.com/${publicPlaybackId}/thumbnail.jpg?time=1`,
+        status: REEL_STATUS.READY,
+        errorReason: null,
+        errorMessage: null,
+        updatedAt: new Date(),
+      });
+      return this.get(reelId, viewerId);
+    }
+
+    // Asset exists but is still preparing — promote pending → processing
+    // if we hadn't recorded the asset id yet. Frontend polling will pick
+    // up the `ready` transition on the next reconcile.
+    if (!reel.muxAssetId && muxAssetId) {
+      await reelRepository.update(reelId, {
+        muxAssetId,
+        status: REEL_STATUS.PROCESSING,
+        updatedAt: new Date(),
+      });
+    }
+    return this.get(reelId, viewerId);
+  },
+
+  /**
    * Fetch a single reel. Public reels in `ready` are visible to anyone
    * authenticated. Reels in `pending_upload` / `processing` / `errored`
    * are only visible to the author so they can see their own in-flight

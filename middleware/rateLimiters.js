@@ -76,3 +76,13 @@ export const reelShareLimiter = perUserLimiter({
   max: 30,
   message: "Too many shares — try again shortly.",
 });
+
+// Reconcile-from-Mux is a backstop for stuck reels (webhook didn't deliver).
+// Each call costs up to two Mux API requests, so cap it tight — the
+// frontend only invokes it once per stuck reel after several polls, and
+// the bulk-backfill script runs out-of-band with its own throttling.
+export const reelReconcileLimiter = perUserLimiter({
+  windowMs: 60_000,
+  max: 20,
+  message: "Too many reconcile attempts — give Mux a moment.",
+});
