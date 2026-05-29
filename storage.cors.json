@@ -3,18 +3,19 @@
     "origin": [
       "http://localhost:5173",
       "http://localhost:3000",
-      "https://cozie-cs.vercel.app",
-      "https://cozie-kohl.vercel.app"
+      "https://*.vercel.app"
     ],
-    "method": ["GET", "HEAD"],
+    "method": ["DELETE", "GET", "HEAD", "POST", "PUT"],
     "responseHeader": [
+      "Authorization",
       "Content-Type",
       "Content-Length",
       "Content-Range",
       "Accept-Ranges",
       "Range",
       "Date",
-      "ETag"
+      "ETag",
+      "x-goog-resumable"
     ],
     "maxAgeSeconds": 3600
   }
