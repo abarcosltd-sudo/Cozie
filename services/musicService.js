@@ -1,5 +1,6 @@
 import { AppError } from "../utils/AppError.js";
 import { db } from "../config/firebase.js";
+import { logger } from "../utils/logger.js";
 import { musicRepository } from "../repositories/musicRepository.js";
 import { userRepository } from "../repositories/userRepository.js";
 import { notificationService } from "./notificationService.js";
@@ -69,11 +70,46 @@ export const musicService = {
     for (const doc of byTitle) map.set(doc.id, doc);
     for (const doc of byArtist) if (!map.has(doc.id)) map.set(doc.id, doc);
 
+    // Fallback: legacy docs predate the titleLower / artistLower migration
+    // and are invisible to the prefix-range queries above. When the fast
+    // path returns nothing, scan up to 200 most-recent docs and filter
+    // in-memory for a substring match — cheap for a small library.
+    //
+    // Self-heal: on any match that lacks the lowercase fields, fire-and-
+    // forget a write so the next search hits the fast path. Over time the
+    // library converges to fully-backfilled without any ops step.
+    if (map.size === 0) {
+      const recent = await musicRepository.listNewest(200);
+      for (const doc of recent) {
+        const t = (doc.title || "").toLowerCase();
+        const a = (doc.artist || "").toLowerCase();
+        if (!t.includes(term) && !a.includes(term)) continue;
+        if (!map.has(doc.id)) map.set(doc.id, doc);
+        if (!doc.titleLower || !doc.artistLower) {
+          musicRepository
+            .update(doc.id, { titleLower: t, artistLower: a })
+            .catch((err) =>
+              logger.warn(
+                { err: err.message, id: doc.id },
+                "music search backfill failed"
+              )
+            );
+        }
+        if (map.size >= 20) break;
+      }
+    }
+
+    // Include `fileUrl` and `duration` so the reels composer can hand
+    // them straight to the in-browser MusicTrimmer + FFmpeg merge without
+    // a second round trip. Older consumers (ShareMusic) Pick<> just the
+    // fields they need, so the extra payload is harmless to them.
     const songs = Array.from(map.values()).map((doc) => ({
       id: doc.id,
       title: doc.title || "",
       artist: doc.artist || "",
       albumArtUrl: doc.albumArtUrl || null,
+      fileUrl: doc.fileUrl || null,
+      duration: typeof doc.duration === "number" ? doc.duration : null,
     }));
 
     return { songs };
