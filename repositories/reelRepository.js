@@ -82,6 +82,61 @@ export const reelRepository = {
     await reelsCol().doc(reelId).update(updates);
   },
 
+  /** Delete only the parent reel doc. Subcollection cleanup is the
+   *  caller's responsibility — Firestore does NOT cascade. See
+   *  `deleteSubcollection` below. */
+  async delete(reelId) {
+    await reelsCol().doc(reelId).delete();
+  },
+
+  /**
+   * Best-effort batch delete of an entire subcollection under a reel.
+   * Firestore caps writes-per-batch at 500, so we page in chunks and
+   * commit each page. We page-via-startAfter rather than fetching every
+   * doc upfront, so memory stays bounded even on viral reels with tens
+   * of thousands of likes/views.
+   *
+   * Returns the total number of docs removed (for logging).
+   */
+  async deleteSubcollection(reelId, subcollectionName) {
+    const colRef = reelsCol().doc(reelId).collection(subcollectionName);
+    const BATCH = 400; // keep margin below the 500 mutation cap
+    let removed = 0;
+    while (true) {
+      const snap = await colRef.limit(BATCH).get();
+      if (snap.empty) break;
+      const batch = db().batch();
+      for (const doc of snap.docs) batch.delete(doc.ref);
+      await batch.commit();
+      removed += snap.size;
+      if (snap.size < BATCH) break;
+    }
+    return removed;
+  },
+
+  /**
+   * Stream every like doc under a reel — used by the delete pipeline to
+   * find each liker so we can also remove the reverse-index entry at
+   * `users/{likerId}/likedReels/{reelId}`. Like docs are tiny ({ userId,
+   * createdAt }) so paging through them is cheap even at scale.
+   */
+  async listAllLikerIds(reelId) {
+    const colRef = this.likesCol(reelId);
+    const BATCH = 500;
+    const ids = [];
+    let last = null;
+    while (true) {
+      let q = colRef.orderBy("__name__").limit(BATCH);
+      if (last) q = q.startAfter(last);
+      const snap = await q.get();
+      if (snap.empty) break;
+      for (const doc of snap.docs) ids.push(doc.id);
+      if (snap.size < BATCH) break;
+      last = snap.docs[snap.docs.length - 1];
+    }
+    return ids;
+  },
+
   /**
    * Discover-feed query: every ready reel, newest first. Cursor is the
    * doc id of the last item returned (same shape as `listByUserId`).

@@ -8,6 +8,7 @@ import {
   reelViewLimiter,
   reelShareLimiter,
   reelReconcileLimiter,
+  reelDeleteLimiter,
 } from "../middleware/rateLimiters.js";
 import {
   createReelSchema,
@@ -31,6 +32,7 @@ import {
   registerView,
   shareReel,
   reconcileReel,
+  deleteReel,
 } from "../controllers/reelController.js";
 import { handleMuxWebhook } from "../controllers/muxWebhookController.js";
 
@@ -147,6 +149,17 @@ router.get(
   protect,
   validate({ params: reelIdParamSchema }),
   getReel
+);
+
+/* Destructive: author-only delete. Service enforces ownership and
+ * orchestrates Mux + Firestore cleanup. Tight per-user rate limit so a
+ * compromised token can't wipe a library. */
+router.delete(
+  "/:reelId",
+  protect,
+  reelDeleteLimiter,
+  validate({ params: reelIdParamSchema }),
+  deleteReel
 );
 
 export default router;

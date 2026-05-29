@@ -86,3 +86,13 @@ export const reelReconcileLimiter = perUserLimiter({
   max: 20,
   message: "Too many reconcile attempts — give Mux a moment.",
 });
+
+// Reel deletion is destructive and irreversible (also incurs Mux API
+// + Firestore batch traffic per call). The intentional UI is a single
+// per-reel button so legitimate usage is very low — cap tight so a
+// compromised token or runaway script can't wipe an entire library.
+export const reelDeleteLimiter = perUserLimiter({
+  windowMs: 60_000,
+  max: 10,
+  message: "Too many deletions — slow down.",
+});

@@ -112,3 +112,14 @@ export const reconcileReel = asyncHandler(async (req, res) => {
   );
   return ok(res, result);
 });
+
+/**
+ * Delete a reel. Author-only (enforced in the service). On success the
+ * Mux asset is detached, the reel doc + its subcollections are purged,
+ * and any reverse-index entries on liking users are cleaned up. See the
+ * `reelService.deleteReel` jsdoc for the full cleanup contract.
+ */
+export const deleteReel = asyncHandler(async (req, res) => {
+  const result = await reelService.deleteReel(req.params.reelId, req.auth.id);
+  return ok(res, { message: "Reel deleted", ...result });
+});

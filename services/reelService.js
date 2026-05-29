@@ -7,6 +7,7 @@ import { musicRepository } from "../repositories/musicRepository.js";
 import { userRepository } from "../repositories/userRepository.js";
 import { muxService } from "./muxService.js";
 import { notificationService } from "./notificationService.js";
+import { logger } from "../utils/logger.js";
 
 // Mirrors the 60s cap enforced post-upload by the Mux webhook handler.
 // Defined here so service-layer error messages stay consistent.
@@ -346,6 +347,88 @@ export const reelService = {
       });
     }
     return this.get(reelId, viewerId);
+  },
+
+  /**
+   * Delete a reel (author-only).
+   *
+   * Cleanup order is chosen so a partial failure leaves the system in a
+   * sane state — the parent reel doc is the LAST thing we touch:
+   *   1. Validate ownership.
+   *   2. Best-effort Mux asset delete. Mux deletes are idempotent (`muxService.deleteAsset`
+   *      already swallows 404s) so it's safe even if we retry.
+   *   3. Snapshot all liker ids → delete each reverse-index entry at
+   *      `users/{likerId}/likedReels/{reelId}` so "My liked reels" no
+   *      longer surfaces a stale tile pointing at nothing.
+   *   4. Purge the `likes`, `comments`, `views` subcollections in
+   *      bounded batches (Firestore 500-mutation cap).
+   *   5. Finally delete the parent reel doc — once it's gone, the
+   *      webhook handler will simply log "unknown reel" and bail
+   *      (see `muxWebhookController` ~L167) so a late Mux event after
+   *      delete is harmless.
+   *
+   * Notes:
+   *   - We deliberately do NOT scrub notifications that reference this
+   *     reel; they're transient UX surface and Notification fetch already
+   *     tolerates missing targets.
+   *   - Side-effects (Mux, reverse-index, subcollection purges) are
+   *     wrapped in their own try/catch with a `logger.warn` so a single
+   *     subsystem outage can't strand the reel doc — the author always
+   *     gets a successful response, and the worst case is some orphan
+   *     storage on Mux which we clean up out-of-band.
+   *   - Returned id helps the frontend invalidate the right cache slot.
+   */
+  async deleteReel(reelId, viewerId) {
+    const reel = await reelRepository.findById(reelId);
+    if (!reel) throw AppError.notFound("Reel not found");
+    if (reel.userId !== viewerId) {
+      throw AppError.forbidden("Only the author can delete this reel");
+    }
+
+    if (reel.muxAssetId) {
+      try {
+        await muxService.deleteAsset(reel.muxAssetId);
+      } catch (err) {
+        logger.warn(
+          { err: err.message, reelId, muxAssetId: reel.muxAssetId },
+          "reelService.deleteReel: Mux asset delete failed (non-fatal)"
+        );
+      }
+    }
+
+    try {
+      const likerIds = await reelRepository.listAllLikerIds(reelId);
+      const CHUNK = 400;
+      for (let i = 0; i < likerIds.length; i += CHUNK) {
+        const slice = likerIds.slice(i, i + CHUNK);
+        const batch = db().batch();
+        for (const likerId of slice) {
+          batch.delete(userRepository.likedReelRef(likerId, reelId));
+        }
+        await batch.commit();
+      }
+    } catch (err) {
+      logger.warn(
+        { err: err.message, reelId },
+        "reelService.deleteReel: reverse-index purge failed (non-fatal)"
+      );
+    }
+
+    const subcollections = ["likes", "comments", "views"];
+    for (const sub of subcollections) {
+      try {
+        await reelRepository.deleteSubcollection(reelId, sub);
+      } catch (err) {
+        logger.warn(
+          { err: err.message, reelId, subcollection: sub },
+          "reelService.deleteReel: subcollection purge failed (non-fatal)"
+        );
+      }
+    }
+
+    await reelRepository.delete(reelId);
+
+    return { deleted: true, reelId };
   },
 
   /**
