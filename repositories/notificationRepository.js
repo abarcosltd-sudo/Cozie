@@ -42,6 +42,17 @@ export const notificationRepository = {
   /**
    * Page over every unread doc — used by `markAll`. Caller is responsible
    * for batching the actual updates (Firestore limits 500 writes per batch).
+   *
+   * IMPORTANT: we deliberately don't `orderBy("createdAt")` here. That
+   * combined with the `where("read","==",false)` filter would need a
+   * composite `(read asc, createdAt desc)` index on the `notifications`
+   * subcollection — which isn't declared in `firestore.indexes.json`
+   * (and adding it would make `firebase deploy --only firestore:indexes`
+   * a hard prereq for "Mark all as read" to work). For markAll we don't
+   * care about order at all — we just want every unread doc. Firestore
+   * falls back to `__name__` order when no explicit orderBy is given,
+   * and `startAfter(docSnap)` walks that order using the auto-built
+   * single-field index for `read`.
    */
   async listUnreadDocs(userId, pageSize = 400) {
     const out = [];
@@ -49,7 +60,6 @@ export const notificationRepository = {
     while (true) {
       let q = this.col(userId)
         .where("read", "==", false)
-        .orderBy("createdAt", "desc")
         .limit(pageSize);
       if (last) q = q.startAfter(last);
       const snap = await q.get();

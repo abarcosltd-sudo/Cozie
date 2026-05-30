@@ -45,7 +45,17 @@ async function emit({ recipientUserId, id, payload }) {
     return await db().runTransaction(async (tx) => {
       const existing = await tx.get(ref);
       const now = new Date();
-      const createdAt = existing.exists
+      const wasUnreadAlready = existing.exists && existing.data().read === false;
+
+      // `createdAt` position policy:
+      //   - already-unread doc (no-op re-emit): keep original timestamp
+      //     so a visible notif doesn't "jump" to the top on every spam
+      //     re-trigger.
+      //   - brand new OR resurrected-from-read: stamp NOW. This is
+      //     critical for the resurrect path — without it, the badge
+      //     ticks up but the notif stays buried at its old chronological
+      //     position and reads as "no new notification" to the user.
+      const createdAt = wasUnreadAlready
         ? existing.data().createdAt || now
         : now;
 
@@ -57,7 +67,6 @@ async function emit({ recipientUserId, id, payload }) {
         updatedAt: now,
       });
 
-      const wasUnreadAlready = existing.exists && existing.data().read === false;
       if (!wasUnreadAlready) {
         tx.update(userRef, {
           unreadNotificationCount: FieldValue.increment(1),
