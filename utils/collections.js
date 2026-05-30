@@ -32,6 +32,11 @@ export const NOTIFICATION_TYPES = Object.freeze({
   SONG_LIKE: "song_like",
   REEL_LIKE: "reel_like",
   REEL_COMMENT: "reel_comment",
+  // Comment-level interactions. Recipient is the COMMENT's author
+  // (not the post/reel author). Reply recipients = author of the
+  // comment being replied to.
+  COMMENT_LIKE: "comment_like",
+  COMMENT_REPLY: "comment_reply",
 });
 
 /**

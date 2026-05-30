@@ -9,10 +9,12 @@ import {
   reelShareLimiter,
   reelReconcileLimiter,
   reelDeleteLimiter,
+  commentLikeLimiter,
 } from "../middleware/rateLimiters.js";
 import {
   createReelSchema,
   reelIdParamSchema,
+  reelCommentIdParamSchema,
   userIdParamSchema,
   listReelsQuerySchema,
   listUserReelsQuerySchema,
@@ -28,7 +30,9 @@ import {
   getByUser,
   likeReel,
   getComments,
+  getReelCommentReplies,
   addReelComment,
+  toggleReelCommentLike,
   registerView,
   shareReel,
   reconcileReel,
@@ -115,6 +119,28 @@ router.post(
   reelCommentLimiter,
   validate({ params: reelIdParamSchema, body: addCommentSchema }),
   addReelComment
+);
+
+// Replies under a single top-level reel comment.
+router.get(
+  "/:reelId/comments/:commentId/replies",
+  protect,
+  validate({
+    params: reelCommentIdParamSchema,
+    query: listCommentsQuerySchema,
+  }),
+  getReelCommentReplies
+);
+
+// Toggle a like on a reel comment. `loadUser` provides the denormalized
+// actor profile that the comment-like notification fan-out needs.
+router.post(
+  "/:reelId/comments/:commentId/like",
+  protect,
+  loadUser,
+  commentLikeLimiter,
+  validate({ params: reelCommentIdParamSchema }),
+  toggleReelCommentLike
 );
 
 router.post(

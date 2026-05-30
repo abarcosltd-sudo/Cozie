@@ -265,8 +265,14 @@ export const reelRepository = {
     return reelsCol().doc(reelId).collection(SUBCOLLECTIONS.COMMENTS);
   },
 
-  async listComments(reelId, { cursor, limit = 20 } = {}) {
+  /**
+   * Top-level comments only (replies are returned separately by
+   * `listReplies`). Requires the `(parentCommentId asc, createdAt desc)`
+   * composite index declared in `firestore.indexes.json`.
+   */
+  async listTopLevelComments(reelId, { cursor, limit = 20 } = {}) {
     let q = this.commentsCol(reelId)
+      .where("parentCommentId", "==", null)
       .orderBy("createdAt", "desc")
       .limit(limit + 1);
 
@@ -283,6 +289,45 @@ export const reelRepository = {
     }));
     const nextCursor = overflow ? docs[docs.length - 1].id : null;
     return { items: docs, nextCursor };
+  },
+
+  async listReplies(reelId, parentCommentId, { cursor, limit = 20 } = {}) {
+    let q = this.commentsCol(reelId)
+      .where("parentCommentId", "==", parentCommentId)
+      .orderBy("createdAt", "desc")
+      .limit(limit + 1);
+
+    if (cursor) {
+      const cursorDoc = await this.commentsCol(reelId).doc(cursor).get();
+      if (cursorDoc.exists) q = q.startAfter(cursorDoc);
+    }
+
+    const snap = await q.get();
+    const overflow = snap.docs.length > limit;
+    const docs = (overflow ? snap.docs.slice(0, limit) : snap.docs).map((d) => ({
+      id: d.id,
+      ...d.data(),
+    }));
+    const nextCursor = overflow ? docs[docs.length - 1].id : null;
+    return { items: docs, nextCursor };
+  },
+
+  commentRef(reelId, commentId) {
+    return this.commentsCol(reelId).doc(commentId);
+  },
+
+  async findCommentById(reelId, commentId) {
+    const doc = await this.commentRef(reelId, commentId).get();
+    if (!doc.exists) return null;
+    return { id: doc.id, ...doc.data() };
+  },
+
+  commentLikesCol(reelId, commentId) {
+    return this.commentRef(reelId, commentId).collection(SUBCOLLECTIONS.LIKES);
+  },
+
+  commentLikeRef(reelId, commentId, userId) {
+    return this.commentLikesCol(reelId, commentId).doc(userId);
   },
 
   async addComment(reelId, commentData) {

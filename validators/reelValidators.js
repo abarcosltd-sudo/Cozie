@@ -42,6 +42,15 @@ export const listCommentsQuerySchema = z.object({
 
 export const addCommentSchema = z.object({
   text: z.string().trim().min(1).max(1000),
+  /** When set, this comment is a reply attached to `parentCommentId`.
+   *  Replies are flat — the service re-parents replies-of-replies up to
+   *  the top-level comment, so callers don't need to worry about depth. */
+  parentCommentId: z.string().min(1).nullable().optional(),
+});
+
+export const reelCommentIdParamSchema = z.object({
+  reelId: z.string().min(1),
+  commentId: z.string().min(1),
 });
 
 export const shareReelSchema = z.object({

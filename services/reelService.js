@@ -26,6 +26,59 @@ function displayName(user) {
 }
 
 /**
+ * Hydrate a batch of comments with viewer-perspective `likedByUser` in a
+ * single `db().getAll(...refs)` round-trip. Falls back to looking up the
+ * author profile only when the comment doc lacks the denormalized
+ * `userName` — backward-compatible with comments written before that
+ * field existed. `repo` must expose `commentLikeRef(parentId, commentId,
+ * userId)`; pass `reelRepository` or `musicPostRepository`.
+ */
+async function hydrateComments(parentId, comments, viewerId, repo) {
+  if (comments.length === 0) return [];
+
+  const likeRefs = viewerId
+    ? comments.map((c) => repo.commentLikeRef(parentId, c.id, viewerId))
+    : [];
+  const missingAuthorIds = [
+    ...new Set(
+      comments
+        .filter((c) => !c.userName && c.userId)
+        .map((c) => c.userId)
+    ),
+  ];
+  const authorRefs = missingAuthorIds.map((id) => userRepository.ref(id));
+
+  const allRefs = [...likeRefs, ...authorRefs];
+  const snapshots = allRefs.length > 0 ? await db().getAll(...allRefs) : [];
+
+  const likedByUser = new Map();
+  for (let i = 0; i < likeRefs.length; i++) {
+    likedByUser.set(comments[i].id, Boolean(snapshots[i]?.exists));
+  }
+  const authorMap = new Map();
+  for (let i = 0; i < authorRefs.length; i++) {
+    const snap = snapshots[likeRefs.length + i];
+    if (snap?.exists) authorMap.set(snap.id, { id: snap.id, ...snap.data() });
+  }
+
+  return comments.map((c) => {
+    const fallback = authorMap.get(c.userId);
+    return {
+      id: c.id,
+      userId: c.userId,
+      userName: c.userName || displayName(fallback),
+      userAvatarUrl: c.userAvatarUrl || fallback?.photoURL || null,
+      text: c.text,
+      parentCommentId: c.parentCommentId || null,
+      likeCount: c.likeCount || 0,
+      likedByUser: likedByUser.get(c.id) || false,
+      replyCount: c.replyCount || 0,
+      createdAt: toIso(c.createdAt),
+    };
+  });
+}
+
+/**
  * Convert a reel Firestore doc to the over-the-wire shape documented in
  * `REELS_FEATURE_SPEC.md` section 9.2. When the reel isn't ready yet,
  * the playback fields are omitted so the client can rely on `status`
@@ -587,32 +640,72 @@ export const reelService = {
     };
   },
 
-  async listComments(reelId, { cursor, limit } = {}) {
+  async listComments(reelId, viewerId, { cursor, limit } = {}) {
     const reel = await reelRepository.findById(reelId);
     if (!reel) throw AppError.notFound("Reel not found");
 
-    const { items, nextCursor } = await reelRepository.listComments(reelId, {
-      cursor,
-      limit,
-    });
+    const { items, nextCursor } =
+      await reelRepository.listTopLevelComments(reelId, { cursor, limit });
 
-    // Comments carry author snapshots written at post time, so the list
-    // path is one query — no per-comment author lookup needed.
-    const comments = items.map((c) => ({
-      id: c.id,
-      userId: c.userId,
-      userName: c.userName || "User",
-      userAvatarUrl: c.userAvatarUrl || null,
-      text: c.text,
-      createdAt: toIso(c.createdAt),
-    }));
-
+    const comments = await hydrateComments(
+      reelId,
+      items,
+      viewerId,
+      reelRepository
+    );
     return { comments, nextCursor, count: comments.length };
   },
 
-  async addComment(reelId, userId, text) {
+  /**
+   * Replies under a single top-level comment. Same response shape as
+   * `listComments` so the client renderer is uniform.
+   */
+  async listReplies(
+    reelId,
+    parentCommentId,
+    viewerId,
+    { cursor, limit } = {}
+  ) {
+    const parent = await reelRepository.findCommentById(
+      reelId,
+      parentCommentId
+    );
+    if (!parent) throw AppError.notFound("Comment not found");
+
+    const { items, nextCursor } = await reelRepository.listReplies(
+      reelId,
+      parentCommentId,
+      { cursor, limit }
+    );
+    const comments = await hydrateComments(
+      reelId,
+      items,
+      viewerId,
+      reelRepository
+    );
+    return { comments, nextCursor, count: comments.length };
+  },
+
+  async addComment(reelId, userId, text, { parentCommentId = null } = {}) {
     const reel = await reelRepository.findById(reelId);
     if (!reel) throw AppError.notFound("Reel not found");
+
+    // Resolve attached parent (flat: reply-of-reply re-parents to the
+    // top-level comment so the conversation stays one level deep).
+    let attachedParentId = null;
+    let parentComment = null;
+    if (parentCommentId) {
+      const target = await reelRepository.findCommentById(
+        reelId,
+        parentCommentId
+      );
+      if (!target) throw AppError.notFound("Parent comment not found");
+      attachedParentId = target.parentCommentId || target.id;
+      parentComment =
+        attachedParentId === target.id
+          ? target
+          : await reelRepository.findCommentById(reelId, attachedParentId);
+    }
 
     const author = await userRepository.findById(userId);
     const now = new Date();
@@ -621,21 +714,46 @@ export const reelService = {
       userName: displayName(author),
       userAvatarUrl: author?.photoURL || null,
       text,
+      parentCommentId: attachedParentId,
+      likeCount: 0,
+      replyCount: 0,
       createdAt: now,
     };
 
     const { id } = await reelRepository.addComment(reelId, commentData);
-    await reelRepository.update(reelId, {
-      commentCount: FieldValue.increment(1),
-      updatedAt: now,
-    });
+    const parentUpdates = [
+      reelRepository.update(reelId, {
+        commentCount: FieldValue.increment(1),
+        updatedAt: now,
+      }),
+    ];
+    if (attachedParentId) {
+      parentUpdates.push(
+        reelRepository
+          .commentRef(reelId, attachedParentId)
+          .update({ replyCount: FieldValue.increment(1) })
+      );
+    }
+    await Promise.all(parentUpdates);
 
-    await notificationService.emitReelComment({
-      actorUser: author ? { id: userId, ...author } : { id: userId },
-      reel,
-      commentId: id,
-      commentText: text,
-    });
+    if (attachedParentId && parentComment) {
+      await notificationService.emitCommentReply({
+        actorUser: author ? { id: userId, ...author } : { id: userId },
+        parentCommentAuthorId: parentComment.userId,
+        surface: "reel",
+        surfaceId: reelId,
+        parentCommentId: attachedParentId,
+        replyId: id,
+        replyText: text,
+      });
+    } else {
+      await notificationService.emitReelComment({
+        actorUser: author ? { id: userId, ...author } : { id: userId },
+        reel,
+        commentId: id,
+        commentText: text,
+      });
+    }
 
     return {
       commentId: id,
@@ -645,8 +763,84 @@ export const reelService = {
         userName: commentData.userName,
         userAvatarUrl: commentData.userAvatarUrl,
         text,
+        parentCommentId: attachedParentId,
+        likeCount: 0,
+        likedByUser: false,
+        replyCount: 0,
         createdAt: now.toISOString(),
       },
+    };
+  },
+
+  /**
+   * Toggle a like on a reel comment. Same tx pattern as `toggleLike` for
+   * reels themselves — atomic over (comment doc, likes/{viewerId}) so the
+   * count can never drift. Notification fan-out happens outside the tx so
+   * a notif blip can't roll the like back.
+   */
+  async toggleCommentLike(reelId, commentId, user) {
+    const reel = await reelRepository.findById(reelId);
+    if (!reel) throw AppError.notFound("Reel not found");
+    const commentRef = reelRepository.commentRef(reelId, commentId);
+    const likeRef = reelRepository.commentLikeRef(
+      reelId,
+      commentId,
+      user.id
+    );
+
+    const result = await db().runTransaction(async (tx) => {
+      const [commentSnap, likeSnap] = await Promise.all([
+        tx.get(commentRef),
+        tx.get(likeRef),
+      ]);
+      if (!commentSnap.exists) throw AppError.notFound("Comment not found");
+
+      const data = commentSnap.data();
+      const current = data.likeCount || 0;
+      const now = new Date();
+
+      let liked;
+      let newCount;
+      if (likeSnap.exists) {
+        tx.delete(likeRef);
+        newCount = Math.max(0, current - 1);
+        liked = false;
+      } else {
+        tx.set(likeRef, { userId: user.id, createdAt: now });
+        newCount = current + 1;
+        liked = true;
+      }
+
+      tx.update(commentRef, { likeCount: newCount });
+      return {
+        liked,
+        likeCount: newCount,
+        commentAuthorId: data.userId,
+        commentText: data.text || "",
+      };
+    });
+
+    if (result.liked) {
+      await notificationService.emitCommentLike({
+        actorUser: user,
+        commentAuthorId: result.commentAuthorId,
+        surface: "reel",
+        surfaceId: reelId,
+        commentId,
+        commentText: result.commentText,
+      });
+    } else {
+      await notificationService.withdrawCommentLike({
+        actorUserId: user.id,
+        commentAuthorId: result.commentAuthorId,
+        commentId,
+      });
+    }
+
+    return {
+      liked: result.liked,
+      likeCount: result.likeCount,
+      message: result.liked ? "Comment liked" : "Comment unliked",
     };
   },
 

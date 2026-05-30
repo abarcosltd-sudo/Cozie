@@ -19,6 +19,61 @@ function displayName(user) {
 }
 
 /**
+ * Hydrate a batch of comments with viewer-perspective `likedByUser` in a
+ * single `db().getAll(...refs)` round-trip. Falls back to looking up the
+ * author profile only when the comment doc lacks the denormalized
+ * `userName` — old comments written before that field was denormalized
+ * keep working without a manual backfill.
+ *
+ * `repo` is duck-typed: must expose `commentLikeRef(parentId, commentId,
+ * userId)`. Pass `musicPostRepository` or `reelRepository`.
+ */
+async function hydrateComments(parentId, comments, viewerId, repo) {
+  if (comments.length === 0) return [];
+
+  const likeRefs = viewerId
+    ? comments.map((c) => repo.commentLikeRef(parentId, c.id, viewerId))
+    : [];
+  const missingAuthorIds = [
+    ...new Set(
+      comments
+        .filter((c) => !c.userName && c.userId)
+        .map((c) => c.userId)
+    ),
+  ];
+  const authorRefs = missingAuthorIds.map((id) => userRepository.ref(id));
+
+  const allRefs = [...likeRefs, ...authorRefs];
+  const snapshots = allRefs.length > 0 ? await db().getAll(...allRefs) : [];
+
+  const likedByUser = new Map();
+  for (let i = 0; i < likeRefs.length; i++) {
+    likedByUser.set(comments[i].id, Boolean(snapshots[i]?.exists));
+  }
+  const authorMap = new Map();
+  for (let i = 0; i < authorRefs.length; i++) {
+    const snap = snapshots[likeRefs.length + i];
+    if (snap?.exists) authorMap.set(snap.id, { id: snap.id, ...snap.data() });
+  }
+
+  return comments.map((c) => {
+    const fallback = authorMap.get(c.userId);
+    return {
+      id: c.id,
+      userId: c.userId,
+      userName: c.userName || displayName(fallback),
+      userAvatarUrl: c.userAvatarUrl || fallback?.photoURL || null,
+      text: c.text,
+      parentCommentId: c.parentCommentId || null,
+      likeCount: c.likeCount || 0,
+      likedByUser: likedByUser.get(c.id) || false,
+      replyCount: c.replyCount || 0,
+      createdAt: toIso(c.createdAt),
+    };
+  });
+}
+
+/**
  * Shared feed-rendering fan-out used by both `listFeed` and `listExploreFeed`.
  *
  * For a batch of posts, hydrates author profile data and the current viewer's
@@ -219,62 +274,220 @@ export const musicPostService = {
     };
   },
 
-  async listComments(postId) {
-    const comments = await musicPostRepository.listComments(postId);
-    const enriched = await Promise.all(
-      comments.map(async (c) => {
-        let userName = c.userName;
-        let userAvatarUrl = c.userAvatarUrl;
-        if (!userName && c.userId) {
-          const author = await userRepository.findById(c.userId);
-          userName = displayName(author);
-          userAvatarUrl = author?.photoURL || null;
-        }
-        return {
-          id: c.id,
-          userId: c.userId,
-          userName: userName || "User",
-          userAvatarUrl: userAvatarUrl || null,
-          text: c.text,
-          createdAt: toIso(c.createdAt),
-        };
-      })
+  /**
+   * Top-level comments only. Returns each comment with viewer-perspective
+   * `likedByUser` plus denormalized `likeCount` and `replyCount`. The
+   * three counters are part of the response contract — clients render
+   * them without an extra round-trip.
+   */
+  async listComments(postId, viewerId, { cursor, limit } = {}) {
+    const { items, nextCursor } = await musicPostRepository.listTopLevelComments(
+      postId,
+      { cursor, limit }
     );
-
-    return { comments: enriched, count: enriched.length };
+    const comments = await hydrateComments(
+      postId,
+      items,
+      viewerId,
+      musicPostRepository
+    );
+    return { comments, nextCursor, count: comments.length };
   },
 
-  async addComment(postId, userId, text) {
+  /**
+   * Replies under a top-level comment. Same hydration shape as
+   * `listComments`; `replyCount` is always 0 on reply docs because the
+   * tree is flat (replies don't themselves have replies).
+   */
+  async listReplies(postId, parentCommentId, viewerId, { cursor, limit } = {}) {
+    const parent = await musicPostRepository.findCommentById(
+      postId,
+      parentCommentId
+    );
+    if (!parent) throw AppError.notFound("Comment not found");
+
+    const { items, nextCursor } = await musicPostRepository.listReplies(
+      postId,
+      parentCommentId,
+      { cursor, limit }
+    );
+    const comments = await hydrateComments(
+      postId,
+      items,
+      viewerId,
+      musicPostRepository
+    );
+    return { comments, nextCursor, count: comments.length };
+  },
+
+  async addComment(postId, userId, text, { parentCommentId = null } = {}) {
     const post = await musicPostRepository.findById(postId);
     if (!post) throw AppError.notFound("Post not found");
 
+    // Resolve the actual parent we'll attach to. Replies are flat: if the
+    // user is replying to a reply, re-parent the new comment up to that
+    // reply's own parent so the conversation stays one level deep
+    // (Instagram-style). Throws if `parentCommentId` doesn't resolve.
+    let attachedParentId = null;
+    let parentComment = null;
+    if (parentCommentId) {
+      const target = await musicPostRepository.findCommentById(
+        postId,
+        parentCommentId
+      );
+      if (!target) throw AppError.notFound("Parent comment not found");
+      attachedParentId = target.parentCommentId || target.id;
+      parentComment =
+        attachedParentId === target.id
+          ? target
+          : await musicPostRepository.findCommentById(postId, attachedParentId);
+    }
+
     const author = await userRepository.findById(userId);
+    const now = new Date();
     const commentData = {
       userId,
       userName: displayName(author),
       userAvatarUrl: author?.photoURL || null,
       text,
-      createdAt: new Date(),
+      parentCommentId: attachedParentId,
+      likeCount: 0,
+      replyCount: 0,
+      createdAt: now,
     };
 
     const { id } = await musicPostRepository.addComment(postId, commentData);
 
-    await musicPostRepository
-      .ref(postId)
-      .update({ commentCount: FieldValue.increment(1) });
+    // Bump aggregates. Parent post `commentCount` includes replies so the
+    // top-of-card count is consistent with Instagram. Reply also bumps the
+    // top-level comment's denormalized `replyCount`.
+    const parentUpdates = [
+      musicPostRepository
+        .ref(postId)
+        .update({ commentCount: FieldValue.increment(1) }),
+    ];
+    if (attachedParentId) {
+      parentUpdates.push(
+        musicPostRepository
+          .commentRef(postId, attachedParentId)
+          .update({ replyCount: FieldValue.increment(1) })
+      );
+    }
+    await Promise.all(parentUpdates);
 
-    // Notify the post author. Each comment is unique (no dedup), so the
-    // post author gets a row per comment.
-    await notificationService.emitPostComment({
-      actorUser: author ? { id: userId, ...author } : { id: userId },
-      post,
-      commentId: id,
-      commentText: text,
-    });
+    // Notifications.
+    //   - Top-level comment → notify post author (existing behaviour).
+    //   - Reply             → notify the parent comment's author. We do
+    //                         NOT also ping the post author for replies;
+    //                         the spec'd UX is "you got a reply" only.
+    if (attachedParentId && parentComment) {
+      await notificationService.emitCommentReply({
+        actorUser: author ? { id: userId, ...author } : { id: userId },
+        parentCommentAuthorId: parentComment.userId,
+        surface: "post",
+        surfaceId: postId,
+        parentCommentId: attachedParentId,
+        replyId: id,
+        replyText: text,
+      });
+    } else {
+      await notificationService.emitPostComment({
+        actorUser: author ? { id: userId, ...author } : { id: userId },
+        post,
+        commentId: id,
+        commentText: text,
+      });
+    }
 
     return {
       commentId: id,
-      comment: { id, ...commentData, createdAt: commentData.createdAt.toISOString() },
+      comment: {
+        id,
+        userId,
+        userName: commentData.userName,
+        userAvatarUrl: commentData.userAvatarUrl,
+        text,
+        parentCommentId: attachedParentId,
+        likeCount: 0,
+        likedByUser: false,
+        replyCount: 0,
+        createdAt: now.toISOString(),
+      },
+    };
+  },
+
+  /**
+   * Toggle a like on a comment. Atomic tx over (comment doc, likes/{viewerId}):
+   *   - first call inserts the like doc + bumps comment.likeCount.
+   *   - second call removes both + emits a `withdrawCommentLike`.
+   * Mirrors `togglePostLike` exactly so the count never drifts.
+   */
+  async toggleCommentLike(postId, commentId, user) {
+    const post = await musicPostRepository.findById(postId);
+    if (!post) throw AppError.notFound("Post not found");
+    const commentRef = musicPostRepository.commentRef(postId, commentId);
+    const likeRef = musicPostRepository.commentLikeRef(
+      postId,
+      commentId,
+      user.id
+    );
+
+    const result = await db().runTransaction(async (tx) => {
+      const [commentSnap, likeSnap] = await Promise.all([
+        tx.get(commentRef),
+        tx.get(likeRef),
+      ]);
+      if (!commentSnap.exists) throw AppError.notFound("Comment not found");
+
+      const data = commentSnap.data();
+      const current = data.likeCount || 0;
+      const now = new Date();
+
+      let liked;
+      let newCount;
+      if (likeSnap.exists) {
+        tx.delete(likeRef);
+        newCount = Math.max(0, current - 1);
+        liked = false;
+      } else {
+        tx.set(likeRef, { userId: user.id, createdAt: now });
+        newCount = current + 1;
+        liked = true;
+      }
+
+      tx.update(commentRef, { likeCount: newCount });
+      return {
+        liked,
+        likeCount: newCount,
+        commentAuthorId: data.userId,
+        commentText: data.text || "",
+      };
+    });
+
+    // Notification fan-out — fire after the tx so a notif failure can't
+    // roll back the like state. Use dedupId so rapid like/unlike spam
+    // doesn't bloat the recipient's inbox.
+    if (result.liked) {
+      await notificationService.emitCommentLike({
+        actorUser: user,
+        commentAuthorId: result.commentAuthorId,
+        surface: "post",
+        surfaceId: postId,
+        commentId,
+        commentText: result.commentText,
+      });
+    } else {
+      await notificationService.withdrawCommentLike({
+        actorUserId: user.id,
+        commentAuthorId: result.commentAuthorId,
+        commentId,
+      });
+    }
+
+    return {
+      liked: result.liked,
+      likeCount: result.likeCount,
+      message: result.liked ? "Comment liked" : "Comment unliked",
     };
   },
 };

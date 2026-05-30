@@ -96,3 +96,23 @@ export const reelDeleteLimiter = perUserLimiter({
   max: 10,
   message: "Too many deletions — slow down.",
 });
+
+// Comment-level interactions (likes + replies). Liking a comment is a
+// toggle, so the limiter mostly catches abuse — legitimate users won't
+// hit this. Replies share the same rate budget as adding a top-level
+// comment (`reelCommentLimiter` / via service path for posts), so this
+// dedicated limiter is just for like toggles.
+export const commentLikeLimiter = perUserLimiter({
+  windowMs: 60_000,
+  max: 60,
+  message: "Slow down — too many comment likes in too short a time.",
+});
+
+// Music posts previously had no per-user comment limiter (only the
+// global apiLimiter). Add one matching `reelCommentLimiter` so the two
+// surfaces have parity now that replies multiply comment write volume.
+export const postCommentLimiter = perUserLimiter({
+  windowMs: 60_000,
+  max: 20,
+  message: "Too many comments — give it a moment.",
+});

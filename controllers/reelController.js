@@ -67,10 +67,27 @@ export const likeReel = asyncHandler(async (req, res) => {
 });
 
 export const getComments = asyncHandler(async (req, res) => {
-  const result = await reelService.listComments(req.params.reelId, {
-    cursor: req.validatedQuery?.cursor,
-    limit: req.validatedQuery?.limit,
-  });
+  const result = await reelService.listComments(
+    req.params.reelId,
+    req.auth.id,
+    {
+      cursor: req.validatedQuery?.cursor,
+      limit: req.validatedQuery?.limit,
+    }
+  );
+  return ok(res, result);
+});
+
+export const getReelCommentReplies = asyncHandler(async (req, res) => {
+  const result = await reelService.listReplies(
+    req.params.reelId,
+    req.params.commentId,
+    req.auth.id,
+    {
+      cursor: req.validatedQuery?.cursor,
+      limit: req.validatedQuery?.limit,
+    }
+  );
   return ok(res, result);
 });
 
@@ -78,9 +95,19 @@ export const addReelComment = asyncHandler(async (req, res) => {
   const result = await reelService.addComment(
     req.params.reelId,
     req.auth.id,
-    req.body.text
+    req.body.text,
+    { parentCommentId: req.body.parentCommentId ?? null }
   );
   return created(res, result);
+});
+
+export const toggleReelCommentLike = asyncHandler(async (req, res) => {
+  const result = await reelService.toggleCommentLike(
+    req.params.reelId,
+    req.params.commentId,
+    req.user || { id: req.auth.id }
+  );
+  return ok(res, result);
 });
 
 export const registerView = asyncHandler(async (req, res) => {

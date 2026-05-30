@@ -28,6 +28,20 @@ export const postIdParamSchema = z.object({
   postId: z.string().min(1),
 });
 
+export const postCommentIdParamSchema = z.object({
+  postId: z.string().min(1),
+  commentId: z.string().min(1),
+});
+
 export const addCommentSchema = z.object({
   text: z.string().trim().min(1).max(1000),
+  /** When set, this comment is a reply attached to `parentCommentId`.
+   *  Replies are flat — the service re-parents replies-of-replies up to
+   *  the top-level comment, so callers don't need to worry about depth. */
+  parentCommentId: z.string().min(1).nullable().optional(),
+});
+
+export const listCommentsQuerySchema = z.object({
+  cursor: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(50).optional().default(20),
 });

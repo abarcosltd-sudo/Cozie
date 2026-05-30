@@ -268,6 +268,83 @@ export const notificationService = {
     });
   },
 
+  // --- Comment-level notifications -----------------------------------------
+  // Recipients are the COMMENT author (not the post/reel author):
+  //   - comment_like: notify whoever wrote the comment that someone liked it.
+  //   - comment_reply: notify the comment author that someone replied to them.
+  // Self-actions are skipped by the `emit` primitive (you can't notif yourself
+  // for liking / replying to your own comment).
+  //
+  // `targetType` reflects the surface ("post" | "reel") so the existing
+  // notification routing logic keeps working — extra metadata (commentId,
+  // parentCommentId, replyId, etc.) lives in `snapshot`.
+
+  async emitCommentLike({
+    actorUser,
+    commentAuthorId,
+    surface, // "post" | "reel"
+    surfaceId, // postId | reelId
+    commentId,
+    commentText,
+  }) {
+    if (!actorUser?.id || !commentAuthorId) return null;
+    return emit({
+      recipientUserId: commentAuthorId,
+      id: dedupId(NOTIFICATION_TYPES.COMMENT_LIKE, actorUser.id, commentId),
+      payload: {
+        type: NOTIFICATION_TYPES.COMMENT_LIKE,
+        actorId: actorUser.id,
+        actorName: actorDisplayName(actorUser),
+        actorAvatarUrl: actorUser.photoURL || null,
+        targetType: surface,
+        targetId: surfaceId,
+        snapshot: {
+          commentId,
+          commentText: (commentText || "").slice(0, 240),
+        },
+      },
+    });
+  },
+
+  async withdrawCommentLike({ actorUserId, commentAuthorId, commentId }) {
+    if (!commentAuthorId) return null;
+    return withdraw({
+      recipientUserId: commentAuthorId,
+      id: dedupId(NOTIFICATION_TYPES.COMMENT_LIKE, actorUserId, commentId),
+    });
+  },
+
+  async emitCommentReply({
+    actorUser,
+    parentCommentAuthorId,
+    surface, // "post" | "reel"
+    surfaceId,
+    parentCommentId,
+    replyId,
+    replyText,
+  }) {
+    if (!actorUser?.id || !parentCommentAuthorId) return null;
+    // Each reply is a unique event; auto-id keyed on the reply doc id so
+    // the recipient gets one notif per reply (matches the comment pattern).
+    return emit({
+      recipientUserId: parentCommentAuthorId,
+      id: `${NOTIFICATION_TYPES.COMMENT_REPLY}__${replyId}`,
+      payload: {
+        type: NOTIFICATION_TYPES.COMMENT_REPLY,
+        actorId: actorUser.id,
+        actorName: actorDisplayName(actorUser),
+        actorAvatarUrl: actorUser.photoURL || null,
+        targetType: surface,
+        targetId: surfaceId,
+        snapshot: {
+          parentCommentId,
+          replyId,
+          replyText: (replyText || "").slice(0, 240),
+        },
+      },
+    });
+  },
+
   // ---- Read-side ---------------------------------------------------------
 
   async list(userId, { cursor, limit, unreadOnly } = {}) {
