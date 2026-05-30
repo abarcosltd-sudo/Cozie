@@ -217,6 +217,28 @@ export const musicService = {
     return { liked: result.liked, likeCount: result.likeCount };
   },
 
+  /**
+   * Viewer-perspective like state for a single song. Used by the music
+   * player to paint the heart icon on track-change. Reads the song doc
+   * (for the denormalized `likeCount`) and the viewer's `likes/{userId}`
+   * subdoc (for `liked`) in a single Firestore round-trip.
+   *
+   * Throws 404 if the song doesn't exist; treats a missing viewer like
+   * doc as "not liked" rather than an error.
+   */
+  async getSongLikeStatus(songId, userId) {
+    const songRef = musicRepository.ref(songId);
+    const likeRef = musicRepository.likeRef(songId, userId);
+    const [songSnap, likeSnap] = await db().getAll(songRef, likeRef);
+
+    if (!songSnap.exists) throw AppError.notFound("Song not found");
+    const song = songSnap.data();
+    return {
+      liked: likeSnap.exists,
+      likeCount: song.likeCount || 0,
+    };
+  },
+
   async listSongLikes(songId, currentUserId) {
     const song = await musicRepository.findById(songId);
     if (!song) throw AppError.notFound("Song not found");

@@ -19,6 +19,7 @@ import {
 import {
   likeSong,
   getSongLikes,
+  getSongLikeStatus,
   getUserLikedSongs,
 } from "../controllers/musicLikeController.js";
 
@@ -56,6 +57,15 @@ router.get(
   protect,
   validate({ params: songIdParamSchema }),
   getSongLikes
+);
+// Viewer-perspective like state for a single song. Lean — returns only
+// `{ liked, likeCount }` so the music player can paint the heart icon
+// without hydrating the full likes list.
+router.get(
+  "/:songId/like-status",
+  protect,
+  validate({ params: songIdParamSchema }),
+  getSongLikeStatus
 );
 
 export default router;

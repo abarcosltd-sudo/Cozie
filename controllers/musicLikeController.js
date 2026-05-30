@@ -12,6 +12,14 @@ export const getSongLikes = asyncHandler(async (req, res) => {
   return ok(res, result);
 });
 
+export const getSongLikeStatus = asyncHandler(async (req, res) => {
+  const result = await musicService.getSongLikeStatus(
+    req.params.songId,
+    req.auth.id
+  );
+  return ok(res, result);
+});
+
 export const getUserLikedSongs = asyncHandler(async (req, res) => {
   const result = await musicService.listUserLikedSongs(req.auth.id);
   return ok(res, result);
