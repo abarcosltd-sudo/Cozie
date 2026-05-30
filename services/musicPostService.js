@@ -101,22 +101,32 @@ export const musicPostService = {
   },
 
   /**
-   * Personalized feed: posts from users the viewer follows, chronological
-   * within that subset. Falls back to an empty array if the viewer follows
-   * nobody — frontend should route them to /api/posts/explore.
+   * Personalized feed: posts from the viewer + users the viewer follows,
+   * chronological within that subset.
+   *
+   * Why include the viewer themselves: every social product (Instagram,
+   * Twitter, TikTok) surfaces the user's own posts on their home feed —
+   * a brand-new user who just shared their first song expects to see it
+   * there, even before they've followed anyone. Excluding self made the
+   * "first share" experience land on an empty state, which read as a bug.
    *
    * Reads viewer's `following` subcollection (capped at 200 IDs — the
-   * "follow horizon"), then fan-out queries musicPosts via `where userId in`
-   * (chunked at 30 to satisfy the Firestore limit).
+   * "follow horizon"), unions with `currentUserId`, then fan-out queries
+   * musicPosts via `where userId in` (chunked at 30 to satisfy the
+   * Firestore limit). The dedupe via Set is defensive — Firestore would
+   * accept duplicate IDs in the `in` clause but they'd waste quota.
+   *
+   * Worst case (user follows 0 people and has 0 posts) still returns an
+   * empty array — `listRecentByUserIds` already early-exits on no results.
    */
   async listFeed(currentUserId) {
     const followingIds = await userRepository.listFollowingIds(
       currentUserId,
       200
     );
-    if (followingIds.length === 0) return { posts: [] };
+    const authorIds = Array.from(new Set([currentUserId, ...followingIds]));
     const posts = await musicPostRepository.listRecentByUserIds(
-      followingIds,
+      authorIds,
       50
     );
     return { posts: await hydrateFeedPosts(posts, currentUserId) };

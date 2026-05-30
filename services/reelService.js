@@ -490,9 +490,14 @@ export const reelService = {
   },
 
   /**
-   * Personalized feed: reels from users the viewer follows, chronological
-   * within that subset. Returns an empty array when the viewer follows
-   * nobody so the client can route them to /discover.
+   * Personalized feed: reels from the viewer + users the viewer follows,
+   * chronological within that subset.
+   *
+   * Why include the viewer themselves: matches the behaviour of every
+   * mainstream short-video product (Instagram Reels tab, TikTok Following)
+   * and avoids the empty-state landing a brand-new user hits after
+   * posting their first reel before they've followed anyone. Same
+   * rationale as `musicPostService.listFeed`.
    *
    * Pagination is not supported on this slice in v1 — the fan-out
    * union doesn't pair cleanly with a single cursor. /discover is the
@@ -500,12 +505,10 @@ export const reelService = {
    */
   async listFeed(viewerId, { limit = 50 } = {}) {
     const followingIds = await userRepository.listFollowingIds(viewerId, 200);
-    if (followingIds.length === 0) {
-      return { reels: [], nextCursor: null, count: 0 };
-    }
+    const authorIds = Array.from(new Set([viewerId, ...followingIds]));
 
     const items = await reelRepository.listRecentByUserIds(
-      followingIds,
+      authorIds,
       limit
     );
     const reels = await hydrateReels(items, viewerId);
