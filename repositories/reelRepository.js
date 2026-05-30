@@ -266,15 +266,23 @@ export const reelRepository = {
   },
 
   /**
-   * Top-level comments only (replies are returned separately by
-   * `listReplies`). Requires the `(parentCommentId asc, createdAt desc)`
-   * composite index declared in `firestore.indexes.json`.
+   * Top-level comments only. We deliberately *don't* push the
+   * `parentCommentId == null` predicate into Firestore — see the
+   * matching jsdoc in `musicPostRepository.listTopLevelComments` for
+   * the full reasoning. tl;dr: `== null` doesn't match docs missing
+   * the field (which is every comment written before this feature
+   * shipped), and avoiding the composite index keeps the API working
+   * without a Firestore deploy step. Comment lists per reel are small
+   * in practice; if a future reel has a flood of mixed-type comments
+   * we can flip to the indexed query after backfilling the field.
    */
   async listTopLevelComments(reelId, { cursor, limit = 20 } = {}) {
+    const RAW_FACTOR = 3;
+    const rawLimit = limit * RAW_FACTOR;
+
     let q = this.commentsCol(reelId)
-      .where("parentCommentId", "==", null)
       .orderBy("createdAt", "desc")
-      .limit(limit + 1);
+      .limit(rawLimit + 1);
 
     if (cursor) {
       const cursorDoc = await this.commentsCol(reelId).doc(cursor).get();
@@ -282,20 +290,25 @@ export const reelRepository = {
     }
 
     const snap = await q.get();
-    const overflow = snap.docs.length > limit;
-    const docs = (overflow ? snap.docs.slice(0, limit) : snap.docs).map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
-    const nextCursor = overflow ? docs[docs.length - 1].id : null;
-    return { items: docs, nextCursor };
+    const overflow = snap.docs.length > rawLimit;
+    const rawDocs = overflow ? snap.docs.slice(0, rawLimit) : snap.docs;
+
+    const filtered = rawDocs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((c) => !c.parentCommentId)
+      .slice(0, limit);
+
+    const nextCursor = overflow ? rawDocs[rawDocs.length - 1].id : null;
+    return { items: filtered, nextCursor };
   },
 
   async listReplies(reelId, parentCommentId, { cursor, limit = 20 } = {}) {
+    const RAW_FACTOR = 3;
+    const rawLimit = limit * RAW_FACTOR;
+
     let q = this.commentsCol(reelId)
-      .where("parentCommentId", "==", parentCommentId)
       .orderBy("createdAt", "desc")
-      .limit(limit + 1);
+      .limit(rawLimit + 1);
 
     if (cursor) {
       const cursorDoc = await this.commentsCol(reelId).doc(cursor).get();
@@ -303,13 +316,16 @@ export const reelRepository = {
     }
 
     const snap = await q.get();
-    const overflow = snap.docs.length > limit;
-    const docs = (overflow ? snap.docs.slice(0, limit) : snap.docs).map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
-    const nextCursor = overflow ? docs[docs.length - 1].id : null;
-    return { items: docs, nextCursor };
+    const overflow = snap.docs.length > rawLimit;
+    const rawDocs = overflow ? snap.docs.slice(0, rawLimit) : snap.docs;
+
+    const filtered = rawDocs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((c) => c.parentCommentId === parentCommentId)
+      .slice(0, limit);
+
+    const nextCursor = overflow ? rawDocs[rawDocs.length - 1].id : null;
+    return { items: filtered, nextCursor };
   },
 
   commentRef(reelId, commentId) {

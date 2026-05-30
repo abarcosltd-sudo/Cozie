@@ -115,17 +115,29 @@ export const musicPostRepository = {
 
   /**
    * Top-level comments only (replies are returned separately by
-   * `listReplies`). Requires the `(parentCommentId asc, createdAt desc)`
-   * composite index declared in `firestore.indexes.json`.
+   * `listReplies`).
    *
-   * Cursor + overflow pagination shape matches the reels comments
-   * endpoint so the two surfaces feel identical to the client.
+   * Important: we *don't* push the `parentCommentId == null` predicate
+   * down to Firestore, even though we have an index for it. Two reasons:
+   *   1. Firestore's `== null` does NOT match docs where the field is
+   *      missing, so any comment written before this feature shipped
+   *      would silently disappear from the list.
+   *   2. Avoiding the composite index makes the API work without a
+   *      `firebase deploy --only firestore:indexes` step.
+   *
+   * Instead we paginate over the raw `orderBy createdAt desc` stream
+   * (auto-indexed) and filter in-app. We over-fetch (`limit * RAW_FACTOR`)
+   * so a single page typically lands enough top-level docs to satisfy
+   * the request; `nextCursor` is the last RAW doc we scanned so the
+   * caller can keep walking even if all of this page was replies.
    */
   async listTopLevelComments(postId, { cursor, limit = 20 } = {}) {
+    const RAW_FACTOR = 3;
+    const rawLimit = limit * RAW_FACTOR;
+
     let q = this.commentsCol(postId)
-      .where("parentCommentId", "==", null)
       .orderBy("createdAt", "desc")
-      .limit(limit + 1);
+      .limit(rawLimit + 1);
 
     if (cursor) {
       const cursorDoc = await this.commentsCol(postId).doc(cursor).get();
@@ -133,20 +145,30 @@ export const musicPostRepository = {
     }
 
     const snap = await q.get();
-    const overflow = snap.docs.length > limit;
-    const docs = (overflow ? snap.docs.slice(0, limit) : snap.docs).map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
-    const nextCursor = overflow ? docs[docs.length - 1].id : null;
-    return { items: docs, nextCursor };
+    const overflow = snap.docs.length > rawLimit;
+    const rawDocs = overflow ? snap.docs.slice(0, rawLimit) : snap.docs;
+
+    const filtered = rawDocs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((c) => !c.parentCommentId)
+      .slice(0, limit);
+
+    const nextCursor = overflow ? rawDocs[rawDocs.length - 1].id : null;
+    return { items: filtered, nextCursor };
   },
 
+  /**
+   * Replies under a single top-level comment. Same app-level filter
+   * approach as `listTopLevelComments` — see that jsdoc for the
+   * rationale around skipping the Firestore predicate.
+   */
   async listReplies(postId, parentCommentId, { cursor, limit = 20 } = {}) {
+    const RAW_FACTOR = 3;
+    const rawLimit = limit * RAW_FACTOR;
+
     let q = this.commentsCol(postId)
-      .where("parentCommentId", "==", parentCommentId)
       .orderBy("createdAt", "desc")
-      .limit(limit + 1);
+      .limit(rawLimit + 1);
 
     if (cursor) {
       const cursorDoc = await this.commentsCol(postId).doc(cursor).get();
@@ -154,13 +176,16 @@ export const musicPostRepository = {
     }
 
     const snap = await q.get();
-    const overflow = snap.docs.length > limit;
-    const docs = (overflow ? snap.docs.slice(0, limit) : snap.docs).map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
-    const nextCursor = overflow ? docs[docs.length - 1].id : null;
-    return { items: docs, nextCursor };
+    const overflow = snap.docs.length > rawLimit;
+    const rawDocs = overflow ? snap.docs.slice(0, rawLimit) : snap.docs;
+
+    const filtered = rawDocs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((c) => c.parentCommentId === parentCommentId)
+      .slice(0, limit);
+
+    const nextCursor = overflow ? rawDocs[rawDocs.length - 1].id : null;
+    return { items: filtered, nextCursor };
   },
 
   commentRef(postId, commentId) {
