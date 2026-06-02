@@ -32,6 +32,13 @@ export const addMusicSchema = z.object({
   description: z.string().max(2000).optional().default(""),
   lyrics: z.string().max(20000).optional().default(""),
   tags: z.string().max(500).optional().default(""),
+  // Catalog-level visibility. "bubble" hides the song from public
+  // discovery surfaces (Trending, Top Charts, search) until the artist
+  // releases their associated bubble post — at which point releasePost
+  // flips this back to "public". Defaults to "public" so the existing
+  // /add-music callers (which never sent this field) keep behaving
+  // identically.
+  visibility: z.enum(["public", "bubble"]).optional().default("public"),
 });
 
 export const searchMusicQuerySchema = z.object({
