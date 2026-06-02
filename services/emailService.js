@@ -8,7 +8,11 @@ let sendgridInitialised = false;
 function ensureSendgrid() {
   if (sendgridInitialised) return;
   if (!env.SENDGRID_API_KEY) {
-    throw new AppError(503, "Email provider is not configured");
+    throw new AppError(
+      503,
+      "Email provider is not configured (SENDGRID_API_KEY is missing on the server). Ask the admin to set it in the deployment env vars.",
+      { code: "EMAIL_NOT_CONFIGURED", reason: "missing_api_key" }
+    );
   }
   sgMail.setApiKey(env.SENDGRID_API_KEY);
   sendgridInitialised = true;
@@ -45,15 +49,27 @@ export const emailService = {
   async sendOtpEmail(email, otp, fullname) {
     ensureSendgrid();
     if (!env.EMAIL_FROM) {
-      throw new AppError(503, "EMAIL_FROM is not configured");
+      throw new AppError(
+        503,
+        "Email sender is not configured (EMAIL_FROM is missing on the server). Ask the admin to set it to a verified SendGrid sender.",
+        { code: "EMAIL_NOT_CONFIGURED", reason: "missing_from_address" }
+      );
     }
     const message = buildOtpEmail(email, otp, fullname);
     try {
       const response = await sgMail.send(message);
       logger.info({ email, statusCode: response[0]?.statusCode }, "OTP email sent");
     } catch (err) {
+      // Log the full SendGrid response body so we can see exactly what
+      // the provider rejected (unverified sender, sandbox mode, bad
+      // template, etc.). The error is re-thrown so the caller (signup /
+      // resendOtp) can decide what HTTP status to return.
       logger.error(
-        { err: err.response?.body || err.message },
+        {
+          err: err.message,
+          statusCode: err.code || err.response?.statusCode,
+          body: err.response?.body,
+        },
         "Failed to send OTP email"
       );
       throw err;

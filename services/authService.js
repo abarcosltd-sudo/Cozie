@@ -172,14 +172,37 @@ export const authService = {
       await emailService.sendOtpEmail(email, otp, user.fullname);
       return { message: "A new verification code has been sent." };
     } catch (err) {
+      // Surface the actual SendGrid response so the network tab tells us
+      // *why* delivery failed (missing API key, unverified sender, sandbox
+      // mode, etc.) rather than a generic "try again". This is especially
+      // important during deploy bring-up — the most common causes are
+      // env vars (`SENDGRID_API_KEY` / `EMAIL_FROM`) missing on the host
+      // or the From address not being a verified single-sender / domain.
+      const sgBody = err.response?.body;
+      const sgErrors = Array.isArray(sgBody?.errors) ? sgBody.errors : [];
+      const reason =
+        sgErrors[0]?.message ||
+        err.message ||
+        "Unknown email provider error";
+
       logger.warn(
-        { err: err.message, email },
+        {
+          err: err.message,
+          status: err.code || err.response?.statusCode,
+          sgBody,
+          email,
+        },
         "OTP email failed during resend"
       );
+
       throw new AppError(
         503,
-        "Could not send the verification email. Please try again in a moment.",
-        { code: "EMAIL_SEND_FAILED" }
+        `Could not send the verification email: ${reason}`,
+        {
+          code: "EMAIL_SEND_FAILED",
+          providerStatus: err.code || err.response?.statusCode || null,
+          providerErrors: sgErrors,
+        }
       );
     }
   },
