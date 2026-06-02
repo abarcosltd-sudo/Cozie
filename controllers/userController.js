@@ -56,6 +56,18 @@ export const getAvailableUsers = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Artist directory for the Discover → Bubbles tab. Cursor-paginated.
+ */
+export const getAvailableArtists = asyncHandler(async (req, res) => {
+  const { cursor, limit } = req.validatedQuery || {};
+  const result = await userService.listAvailableArtists(req.auth.id, {
+    cursor,
+    limit,
+  });
+  return ok(res, result);
+});
+
+/**
  * Public-by-id profile lookup. Returns the same shape as `/profile`
  * (self) for any user the viewer is allowed to see. Frontend hits this
  * for every user-detail page; before this route existed it 404'd.

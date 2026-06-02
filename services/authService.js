@@ -6,15 +6,26 @@ import {
   hashOTP,
   verifyOTPHash,
 } from "../utils/auth.js";
+import { db } from "../config/firebase.js";
 import { userRepository } from "../repositories/userRepository.js";
+import { bubbleRepository } from "../repositories/bubbleRepository.js";
+import { bubbleService } from "./bubbleService.js";
 import { emailService } from "./emailService.js";
 import { logger } from "../utils/logger.js";
+import { USER_TYPES } from "../utils/collections.js";
 
 const OTP_TTL_MIN = 10;
 const BCRYPT_ROUNDS = 12;
 
 export const authService = {
-  async signup({ fullname, username, email, password }) {
+  async signup({
+    fullname,
+    username,
+    email,
+    password,
+    userType = USER_TYPES.USER,
+    artistProfile = null,
+  }) {
     if (await userRepository.findByEmail(email)) {
       throw AppError.badRequest("User already exists");
     }
@@ -23,8 +34,16 @@ export const authService = {
     const otp = generateOTP();
     const otpHash = await hashOTP(otp);
     const otpExpiresAt = new Date(Date.now() + OTP_TTL_MIN * 60 * 1000);
+    const isArtist = userType === USER_TYPES.ARTIST;
 
-    const { id } = await userRepository.create({
+    const now = new Date();
+    // Pre-allocate the user doc id so we can write the user + bubble
+    // (which has doc id == userId) in a single batch.
+    const newUserRef = userRepository.refNew();
+    const userId = newUserRef.id;
+
+    const userData = {
+      id: userId,
       fullname,
       username,
       email,
@@ -42,15 +61,48 @@ export const authService = {
       // Denormalized notification badge counter — incremented by
       // notificationService.emit and decremented by markRead/dismiss.
       unreadNotificationCount: 0,
-    });
+      // Role choice is set here and is immutable thereafter — no upgrade
+      // endpoint in MVP. See PROGRESS / plan for the rationale.
+      userType: isArtist ? USER_TYPES.ARTIST : USER_TYPES.USER,
+      createdAt: now,
+    };
+
+    if (isArtist) {
+      // bubbleId == userId by invariant; the bubble doc is created in the
+      // same batch below so we never end up with a half-registered artist.
+      userData.artistProfile = {
+        artistName: artistProfile.artistName,
+        genres: artistProfile.genres,
+        label: artistProfile.label || null,
+        website: artistProfile.website || null,
+        bio: artistProfile.bio || null,
+        isVerified: false,
+        verificationStatus: "none",
+        bubbleId: userId,
+      };
+    }
+
+    // Atomic user + bubble write. Firestore batches are all-or-nothing,
+    // so the moment this returns either both docs exist or neither does.
+    const batch = db().batch();
+    batch.set(newUserRef, userData);
+    if (isArtist) {
+      const bubbleDoc = bubbleService.buildArtistBubbleDoc({
+        userId,
+        artistName: artistProfile.artistName,
+        now,
+      });
+      batch.set(bubbleRepository.ref(userId), bubbleDoc);
+    }
+    await batch.commit();
 
     try {
       await emailService.sendOtpEmail(email, otp, fullname);
-      return { userId: id, message: "Verification code sent to your email" };
+      return { userId, message: "Verification code sent to your email" };
     } catch (err) {
       logger.warn({ err: err.message, email }, "OTP email failed during signup");
       return {
-        userId: id,
+        userId,
         emailFailed: true,
         warning:
           "Account created but verification email could not be sent. Please request a new code.",

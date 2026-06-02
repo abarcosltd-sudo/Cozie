@@ -22,6 +22,13 @@ export const shareMusicSchema = z.object({
     .max(10)
     .optional()
     .default([]),
+  /**
+   * Post visibility. Defaults to "public" so existing client code
+   * (which doesn't send the field) keeps working. "bubble" is only
+   * accepted from artist-type users — `musicPostService.shareMusic`
+   * enforces that and returns NOT_ARTIST otherwise.
+   */
+  visibility: z.enum(["public", "bubble"]).optional().default("public"),
 });
 
 export const postIdParamSchema = z.object({

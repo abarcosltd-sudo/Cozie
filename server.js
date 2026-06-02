@@ -16,6 +16,7 @@ import postRoutes from "./routes/postRoutes.js";
 import messageRoutes from "./routes/messageRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import reelRoutes from "./routes/reelRoutes.js";
+import bubbleRoutes from "./routes/bubbleRoutes.js";
 
 import { logger } from "./utils/logger.js";
 
@@ -107,6 +108,7 @@ app.use("/api/posts", postRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/reels", reelRoutes);
+app.use("/api/bubbles", bubbleRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

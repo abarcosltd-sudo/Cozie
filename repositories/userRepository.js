@@ -8,6 +8,16 @@ export const userRepository = {
     return usersCol().doc(id);
   },
 
+  /**
+   * Allocate a fresh user doc reference *without* writing it. Used by
+   * signup so we can pre-compute the user id and stage the user write
+   * alongside a sibling write (e.g. the artist bubble) inside a single
+   * Firestore batch.
+   */
+  refNew() {
+    return usersCol().doc();
+  },
+
   async findById(id) {
     const doc = await usersCol().doc(id).get();
     if (!doc.exists) return null;

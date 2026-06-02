@@ -7,12 +7,49 @@ const usernameField = z
   .max(30)
   .regex(/^[a-z0-9_.]+$/i, "Username may contain letters, digits, underscore or dot");
 
-export const signupSchema = z.object({
-  fullname: z.string().trim().min(1).max(100),
-  username: usernameField,
-  email: emailField,
-  password: z.string().min(8).max(72),
+/**
+ * Artist profile required at signup when `userType === "artist"`.
+ * `bubbleId` is set server-side (== userId) inside `authService.signup`
+ * so it is NOT accepted from the client.
+ */
+export const artistProfileInputSchema = z.object({
+  artistName: z.string().trim().min(2).max(60),
+  genres: z.array(z.string().trim().min(1).max(40)).min(1).max(5),
+  label: z.string().trim().max(60).optional(),
+  website: z.string().url().max(200).optional(),
+  bio: z.string().max(500).optional(),
 });
+
+/**
+ * Signup body. Role is chosen here and is immutable thereafter — there
+ * is no upgrade endpoint in MVP. The `.superRefine` enforces the
+ * userType ↔ artistProfile coupling on both sides.
+ */
+export const signupSchema = z
+  .object({
+    fullname: z.string().trim().min(1).max(100),
+    username: usernameField,
+    email: emailField,
+    password: z.string().min(8).max(72),
+    userType: z.enum(["user", "artist"]).optional().default("user"),
+    artistProfile: artistProfileInputSchema.optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.userType === "artist" && !data.artistProfile) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["artistProfile"],
+        message: "artistProfile is required when registering as an artist",
+      });
+    }
+    if (data.userType === "user" && data.artistProfile) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["artistProfile"],
+        message: "artistProfile may only be provided when userType is 'artist'",
+      });
+    }
+  });
 
 export const loginSchema = z.object({
   email: emailField,
