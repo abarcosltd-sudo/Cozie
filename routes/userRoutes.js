@@ -6,6 +6,7 @@ import {
   signupSchema,
   loginSchema,
   verifyOtpSchema,
+  resendOtpSchema,
   preferencesSchema,
   updateProfileSchema,
   generateUploadUrlSchema,
@@ -17,6 +18,7 @@ import {
   loginUser,
   getProfile,
   verifyOTP,
+  resendOTP,
   savePreferences,
   getCurrentUser,
   updateProfile,
@@ -55,6 +57,12 @@ router.post(
   authLimiter,
   validate({ body: verifyOtpSchema }),
   verifyOTP
+);
+router.post(
+  "/resend-otp",
+  authLimiter,
+  validate({ body: resendOtpSchema }),
+  resendOTP
 );
 
 router.get("/profile", protect, getProfile);

@@ -129,6 +129,61 @@ export const authService = {
     };
   },
 
+  /**
+   * Mint and email a fresh OTP for an unverified account. Signup stores
+   * only the bcrypt hash of the original code, so the original can never
+   * be re-sent — this endpoint always generates a brand-new 6-digit
+   * code, overwrites the stored hash + expiry, and fires the email.
+   *
+   * Defensive against enumeration: the response is the same shape
+   * regardless of whether the email exists, EXCEPT we throw 400 if the
+   * account is already verified (which the frontend handles by routing
+   * the user to /login). Rate-limited at the route level via authLimiter.
+   *
+   * If SendGrid fails we surface a 503 (consistent with signup's email
+   * fallback) but still update the stored OTP hash, so a subsequent
+   * resend that succeeds matches the latest code.
+   */
+  async resendOtp({ email }) {
+    const user = await userRepository.findByEmail(email);
+    // Don't reveal whether the email is registered — return a generic
+    // "if an account exists" response. The verified-account path stays
+    // an explicit error because the user is already past signup and
+    // benefits from the clear "log in instead" hint.
+    if (!user) {
+      return {
+        message:
+          "If an account with that email exists, a new code has been sent.",
+      };
+    }
+    if (user.isVerified) {
+      throw AppError.badRequest("Email already verified");
+    }
+
+    const otp = generateOTP();
+    const otpHash = await hashOTP(otp);
+    const otpExpiresAt = new Date(Date.now() + OTP_TTL_MIN * 60 * 1000);
+
+    await userRepository.update(user.id, {
+      otp: { hash: otpHash, expiresAt: otpExpiresAt },
+    });
+
+    try {
+      await emailService.sendOtpEmail(email, otp, user.fullname);
+      return { message: "A new verification code has been sent." };
+    } catch (err) {
+      logger.warn(
+        { err: err.message, email },
+        "OTP email failed during resend"
+      );
+      throw new AppError(
+        503,
+        "Could not send the verification email. Please try again in a moment.",
+        { code: "EMAIL_SEND_FAILED" }
+      );
+    }
+  },
+
   async verifyOtp({ email, otp }) {
     const user = await userRepository.findByEmail(email);
     if (!user) throw AppError.notFound("User not found");

@@ -21,6 +21,11 @@ export const verifyOTP = asyncHandler(async (req, res) => {
   return ok(res, result);
 });
 
+export const resendOTP = asyncHandler(async (req, res) => {
+  const result = await authService.resendOtp(req.body);
+  return ok(res, result);
+});
+
 export const getProfile = asyncHandler(async (req, res) => {
   const user = await userService.getProfile(req.auth.id);
   return ok(res, { user });
