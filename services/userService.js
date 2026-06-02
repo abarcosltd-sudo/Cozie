@@ -130,14 +130,21 @@ export const userService = {
    * `where userType == "artist" orderBy createdAt`. Once it matters,
    * swap to a cursor-paginated Firestore query — the response shape
    * is already cursor-compatible.
+   *
+   * Verification is intentionally NOT a filter — the wireframe shows
+   * both verified and unverified artists in the Trending list. The
+   * Verified badge on the artist row (driven by `isVerified` in the
+   * response) is the visual differentiator. Gating by verification
+   * would hide every new artist on the platform, since verification
+   * is a separate flow (`verificationStatus: pending → approved`)
+   * that most artists won't have completed.
    */
   async listAvailableArtists(currentUserId, { cursor, limit = 20 } = {}) {
     const users = await userRepository.listAll();
     const artists = users.filter(
       (u) =>
         projectUserType(u) === USER_TYPES.ARTIST &&
-        u.id !== currentUserId &&
-        u.isVerified
+        u.id !== currentUserId
     );
     artists.sort((a, b) => {
       const aTs = a.createdAt?.toDate?.()?.getTime?.() ?? new Date(a.createdAt || 0).getTime();
