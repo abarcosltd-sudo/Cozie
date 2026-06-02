@@ -1,7 +1,26 @@
 import { db } from "../config/firebase.js";
 import { COLLECTIONS, SUBCOLLECTIONS } from "../utils/collections.js";
+import { logger } from "../utils/logger.js";
 
 const postsCol = () => db().collection(COLLECTIONS.MUSIC_POSTS);
+
+/**
+ * Firestore raises `FAILED_PRECONDITION` with code 9 when a query needs
+ * a composite index that hasn't been deployed yet. Matching by code is
+ * more robust than string-matching on the message — that text varies
+ * by SDK version and locale.
+ */
+function isMissingIndexError(err) {
+  return err && (err.code === 9 || err.code === "failed-precondition");
+}
+
+function tsMs(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  if (typeof value === "string") return new Date(value).getTime();
+  return new Date(value).getTime();
+}
 
 export const musicPostRepository = {
   ref(postId) {
@@ -64,24 +83,40 @@ export const musicPostRepository = {
    * because a post is bubble-only only when it has an explicit bubbleId.
    * Released posts also retain their bubbleId so the bubble profile
    * keeps showing the artist's history.
+   *
+   * Index resilience: the fast path uses the composite index
+   * (bubbleId ASC, createdAt DESC) declared in firestore.indexes.json.
+   * If that index isn't deployed yet — common in fresh environments —
+   * Firestore returns FAILED_PRECONDITION and we fall back to an
+   * indexless `where bubbleId == X` query with an in-memory sort. This
+   * keeps the endpoint working without a Firestore deploy; we cap the
+   * fallback at 200 docs which is plenty for MVP bubble sizes.
    */
   async listBubblePosts(artistId, { cursor, limit = 20 } = {}) {
-    let q = postsCol()
-      .where("bubbleId", "==", artistId)
-      .orderBy("createdAt", "desc")
-      .limit(limit + 1);
-    if (cursor) {
-      const cursorDoc = await postsCol().doc(cursor).get();
-      if (cursorDoc.exists) q = q.startAfter(cursorDoc);
+    try {
+      let q = postsCol()
+        .where("bubbleId", "==", artistId)
+        .orderBy("createdAt", "desc")
+        .limit(limit + 1);
+      if (cursor) {
+        const cursorDoc = await postsCol().doc(cursor).get();
+        if (cursorDoc.exists) q = q.startAfter(cursorDoc);
+      }
+      const snap = await q.get();
+      const overflow = snap.docs.length > limit;
+      const docs = (overflow ? snap.docs.slice(0, limit) : snap.docs).map(
+        (d) => ({ id: d.id, ...d.data() })
+      );
+      const nextCursor = overflow ? docs[docs.length - 1].id : null;
+      return { items: docs, nextCursor };
+    } catch (err) {
+      if (!isMissingIndexError(err)) throw err;
+      logger.warn(
+        { artistId, err: err.message },
+        "musicPosts bubbleId+createdAt index missing — falling back to in-memory sort. Run `firebase deploy --only firestore:indexes` to re-enable the fast path."
+      );
+      return listBubblePostsIndexless(artistId, { cursor, limit });
     }
-    const snap = await q.get();
-    const overflow = snap.docs.length > limit;
-    const docs = (overflow ? snap.docs.slice(0, limit) : snap.docs).map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
-    const nextCursor = overflow ? docs[docs.length - 1].id : null;
-    return { items: docs, nextCursor };
   },
 
   /**
@@ -244,3 +279,31 @@ export const musicPostRepository = {
     return { id: ref.id };
   },
 };
+
+/**
+ * Fallback path used by listBubblePosts when the composite Firestore
+ * index isn't deployed. Caps at FALLBACK_CAP docs to keep the request
+ * cheap; that's well above realistic MVP-era bubble sizes. Cursor is
+ * still doc-id-based so the response shape matches the fast path and
+ * the client doesn't need to special-case anything.
+ */
+const FALLBACK_CAP = 200;
+async function listBubblePostsIndexless(artistId, { cursor, limit = 20 } = {}) {
+  const snap = await postsCol()
+    .where("bubbleId", "==", artistId)
+    .limit(FALLBACK_CAP)
+    .get();
+  const all = snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt));
+
+  let startIdx = 0;
+  if (cursor) {
+    const i = all.findIndex((p) => p.id === cursor);
+    startIdx = i >= 0 ? i + 1 : 0;
+  }
+  const page = all.slice(startIdx, startIdx + limit);
+  const nextCursor =
+    startIdx + limit < all.length ? page[page.length - 1].id : null;
+  return { items: page, nextCursor };
+}

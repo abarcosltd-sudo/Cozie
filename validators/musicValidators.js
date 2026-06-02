@@ -6,7 +6,10 @@ export const addMusicSchema = z.object({
   title: z.string().trim().min(1).max(200),
   artist: z.string().trim().min(1).max(200),
   featuredArtists: z.string().max(500).optional().default(""),
-  album: z.string().trim().min(1).max(200),
+  // Singles (no album) are first-class on Cozie — especially for bubble
+  // drops — so this is optional. Empty string is the canonical "no album"
+  // value, matching the rest of the optional metadata fields below.
+  album: z.string().trim().max(200).optional().default(""),
   genre: z.string().max(100).nullable().optional(),
   subgenre: z.string().max(100).optional().default(""),
   mood: z.string().max(100).optional().default(""),
