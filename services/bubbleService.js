@@ -16,15 +16,26 @@ function toIso(value) {
 
 /**
  * Shape we return from `/api/bubbles/:artistId` and similar discovery
- * surfaces. Kept deliberately small — feed/post hydration uses its own
+ * surfaces. Includes a flattened slice of the owning artist's profile
+ * (username/photo/verification/genres) so the profile hero can render
+ * without a second round trip. Feed/post hydration uses its own
  * `bubbleInfo` projection on each post.
+ *
+ * Second arg `owner` is the owning user doc (or null) — kept as a
+ * separate read in the service so callers control the I/O batching.
  */
-function publicBubble(bubble) {
+function publicBubble(bubble, owner = null) {
   if (!bubble) return null;
+  const artistProfile = owner?.artistProfile || null;
   return {
     id: bubble.id,
     artistId: bubble.artistId,
-    artistName: bubble.artistName || "",
+    artistName: bubble.artistName || artistProfile?.artistName || "",
+    username: owner?.username || null,
+    photoURL: owner?.photoURL || null,
+    isVerified: artistProfile?.isVerified === true,
+    genres: Array.isArray(artistProfile?.genres) ? artistProfile.genres : [],
+    bio: artistProfile?.bio || null,
     isOpen: bubble.isOpen !== false,
     memberCount: bubble.memberCount || 0,
     postCount: bubble.postCount || 0,
@@ -68,36 +79,49 @@ export const bubbleService = {
     if (!bubble) {
       throw AppError.notFound("Bubble not found");
     }
-    return { bubble: publicBubble(bubble) };
+    // The caller IS the owner here, so we already have everything needed
+    // for the public projection — no extra round trip.
+    return { bubble: publicBubble(bubble, user) };
   },
 
   /**
    * Public bubble fetch. Returns the bubble + caller's membership state.
    * Used by both non-members (renders locked preview) and members
    * (renders full profile) — the caller branches on `userMembership`.
+   *
+   * We always pull the owning artist doc in parallel with the bubble so
+   * `publicBubble` can surface verification/genres/photo without a
+   * second client trip. If the viewer is themselves the artist we reuse
+   * that read to avoid duplicate work.
    */
   async getBubble(artistId, viewerId) {
-    const [bubble, memberDoc, viewerUser] = await Promise.all([
+    const viewerIsOwner = Boolean(viewerId) && viewerId === artistId;
+
+    const [bubble, memberDoc, ownerUser, viewerUser] = await Promise.all([
       bubbleRepository.findById(artistId),
       viewerId ? bubbleRepository.getMemberDoc(artistId, viewerId) : null,
-      viewerId ? userRepository.findById(viewerId) : null,
+      userRepository.findById(artistId),
+      viewerId && !viewerIsOwner
+        ? userRepository.findById(viewerId)
+        : null,
     ]);
 
     if (!bubble) {
       throw AppError.notFound("Bubble not found");
     }
 
-    const isOwner = viewerId && viewerId === artistId;
+    const isOwner = viewerIsOwner;
     const isMember = Boolean(memberDoc) || isOwner;
+    const effectiveViewer = viewerIsOwner ? ownerUser : viewerUser;
 
     return {
-      bubble: publicBubble(bubble),
+      bubble: publicBubble(bubble, ownerUser),
       userMembership: {
         isMember,
         isOwner,
         joinedAt: memberDoc ? toIso(memberDoc.joinedAt) : null,
       },
-      viewerUserType: viewerUser?.userType || USER_TYPES.USER,
+      viewerUserType: effectiveViewer?.userType || USER_TYPES.USER,
     };
   },
 
