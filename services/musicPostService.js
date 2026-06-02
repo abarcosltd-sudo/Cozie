@@ -169,17 +169,32 @@ function toIsoOrNull(value) {
 
 /**
  * Drop bubble-only posts the viewer can't see. Bubble-only =
- * (visibility === "bubble" && !isReleased). The owner artist always
- * passes (they see their own unreleased work). Membership is checked
+ * (visibility === "bubble" && !isReleased). Membership is checked
  * via one `db().getAll` batched read across all distinct bubbles in
  * the candidate set, so this stays O(1) regardless of feed depth.
+ *
+ * `allowOwner` controls whether the owning artist passes the filter
+ * for their own bubble posts:
+ *   - true  (Home / Profile): artists see their own bubble drops in
+ *     their own home feed, matching the wireframe behavior where
+ *     bubble members (including the artist herself) see the bubble
+ *     post on Home.
+ *   - false (Explore / Community): hide owner-authored bubble posts
+ *     too. "From the community" is a discovery surface — what would
+ *     a random non-member see? — so leaking the artist's own
+ *     unreleased work back to them there confuses the mental model
+ *     and breaks the wireframe's locked/released visual hierarchy.
  *
  * We deliberately filter *after* the Firestore fetch rather than
  * pushing into the query because we'd otherwise need composite indexes
  * for every (userId-in, visibility==, isReleased==) combination. Once
  * the feed grows large enough to make over-fetching expensive, revisit.
  */
-async function filterBubblePostsForViewer(posts, viewerId) {
+async function filterBubblePostsForViewer(
+  posts,
+  viewerId,
+  { allowOwner = true } = {}
+) {
   if (!posts || posts.length === 0) return [];
 
   const candidates = posts.map((p) => normalizePostVisibility(p));
@@ -200,7 +215,7 @@ async function filterBubblePostsForViewer(posts, viewerId) {
   return candidates.filter((post) => {
     if (post.visibility !== "bubble" || post.isReleased) return true;
     if (!post.bubbleId) return false;
-    if (post.userId === viewerId) return true; // owner artist always sees their own
+    if (allowOwner && post.userId === viewerId) return true;
     return memberships.get(post.bubbleId) === true;
   });
 }
@@ -356,12 +371,18 @@ export const musicPostService = {
   },
 
   /**
-   * Explore feed: the previous chronological-all behaviour, preserved
-   * verbatim for unauthenticated/empty-follow-graph discovery surfaces.
+   * Explore feed: chronological-all discovery surface. Powers the
+   * Discover ▸ "From the community" section. Bubble-only posts are
+   * hidden from EVERYONE here — including the owning artist — because
+   * a discovery surface should reflect what a random non-member would
+   * see. The artist still has their bubble page (and home feed) to
+   * see their own bubble drops.
    */
   async listExploreFeed(currentUserId) {
     const posts = await musicPostRepository.listRecent(50);
-    const visible = await filterBubblePostsForViewer(posts, currentUserId);
+    const visible = await filterBubblePostsForViewer(posts, currentUserId, {
+      allowOwner: false,
+    });
     return { posts: await hydrateFeedPosts(visible, currentUserId) };
   },
 
