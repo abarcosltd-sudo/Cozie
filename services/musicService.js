@@ -30,13 +30,33 @@ function toLikedSongSnapshot(song) {
   };
 }
 
+/**
+ * Treat `undefined` visibility as "public" so songs uploaded before the
+ * bubble feature shipped keep showing in Trending/Top Charts/search.
+ * The discovery filters call this rather than reading the field
+ * directly so the legacy-compat rule lives in one place.
+ */
+function effectiveSongVisibility(song) {
+  return song?.visibility === "bubble" ? "bubble" : "public";
+}
+
+function isPublicSong(song) {
+  return effectiveSongVisibility(song) === "public";
+}
+
 export const musicService = {
   async addMusic(userId, payload) {
     const now = new Date();
     const title = payload.title || "";
     const artist = payload.artist || "";
+    // Normalize the visibility field up front so every downstream read
+    // (search, trending, charts) can rely on it being present and
+    // typed. Validator already defaults to "public" but we belt-and-
+    // suspender it here for direct service callers.
+    const visibility = payload.visibility === "bubble" ? "bubble" : "public";
     const data = {
       ...payload,
+      visibility,
       // Lower-case copies so prefix search is case-insensitive without
       // pulling every doc client-side. Firestore range queries are case-
       // sensitive, so we maintain these alongside the original fields.
@@ -50,6 +70,28 @@ export const musicService = {
     };
     const { id } = await musicRepository.create(data);
     return { musicId: id };
+  },
+
+  /**
+   * Flip a song's catalog visibility. Called by musicPostService.releasePost
+   * when an artist releases a bubble post — the song should then surface
+   * in Trending / Top Charts / search alongside any other public track.
+   *
+   * Best-effort: failures are logged but don't roll back the release
+   * itself, since the post-side visibility is the canonical access
+   * control. Worst case the song stays hidden from discovery and the
+   * artist can re-trigger by sharing it again.
+   */
+  async setVisibility(songId, visibility) {
+    const next = visibility === "bubble" ? "bubble" : "public";
+    try {
+      await musicRepository.update(songId, { visibility: next });
+    } catch (err) {
+      logger.warn(
+        { err: err.message, songId, visibility: next },
+        "musicService.setVisibility failed"
+      );
+    }
   },
 
   async search(query) {
@@ -99,11 +141,17 @@ export const musicService = {
       }
     }
 
+    // Hide bubble-only catalog rows from search so other users can't
+    // surface an artist's unreleased track via the ShareMusic / Reels
+    // music picker. Owner-side discovery (the bubble itself) is
+    // unaffected — it's gated on bubble membership at the post level.
+    const visibleDocs = Array.from(map.values()).filter(isPublicSong);
+
     // Include `fileUrl` and `duration` so the reels composer can hand
     // them straight to the in-browser MusicTrimmer + FFmpeg merge without
     // a second round trip. Older consumers (ShareMusic) Pick<> just the
     // fields they need, so the extra payload is harmless to them.
-    const songs = Array.from(map.values()).map((doc) => ({
+    const songs = visibleDocs.map((doc) => ({
       id: doc.id,
       title: doc.title || "",
       artist: doc.artist || "",
@@ -115,15 +163,24 @@ export const musicService = {
     return { songs };
   },
 
+  /**
+   * Discovery surfaces (Trending / Top Charts) are over-fetched and
+   * post-filtered. We can't push `where visibility != "bubble"` into
+   * Firestore without (a) backfilling every legacy doc and (b) adding
+   * a composite index for each query — both more work than just
+   * filtering on a 60-doc batch in-app.
+   */
   async listTrending() {
-    const items = await musicRepository.listNewest(20);
-    return { trending: items.map(toSummary) };
+    const items = await musicRepository.listNewest(60);
+    const visible = items.filter(isPublicSong).slice(0, 20);
+    return { trending: visible.map(toSummary) };
   },
 
   async listTopCharts() {
-    const items = await musicRepository.listMostLiked(20);
+    const items = await musicRepository.listMostLiked(60);
+    const visible = items.filter(isPublicSong).slice(0, 20);
     return {
-      charts: items.map((song, index) => ({
+      charts: visible.map((song, index) => ({
         ...toSummary(song),
         number: index + 1,
       })),

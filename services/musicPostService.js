@@ -6,6 +6,7 @@ import { musicRepository } from "../repositories/musicRepository.js";
 import { userRepository } from "../repositories/userRepository.js";
 import { bubbleRepository } from "../repositories/bubbleRepository.js";
 import { notificationService } from "./notificationService.js";
+import { musicService } from "./musicService.js";
 import { USER_TYPES } from "../utils/collections.js";
 
 /**
@@ -300,8 +301,18 @@ export const musicPostService = {
         releasedAt,
         updatedAt: releasedAt,
       });
-      return { postId, releasedAt };
+      return { postId, releasedAt, songId: post.songId };
     });
+
+    // Bubble uploads also hide the underlying music catalog row
+    // (visibility="bubble" on the music doc). Once the post is released
+    // the song should reappear in Trending / Top Charts / search, so we
+    // flip the catalog visibility here. Best-effort by design — the
+    // post-side flag is the canonical access control, so a transient
+    // write failure here only delays the song reaching discovery.
+    if (result.songId) {
+      await musicService.setVisibility(result.songId, "public");
+    }
 
     return {
       postId: result.postId,
