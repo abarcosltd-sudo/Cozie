@@ -75,4 +75,47 @@ export const emailService = {
       throw err;
     }
   },
+
+  async sendPasswordResetEmail(email, otp, fullname) {
+    ensureSendgrid();
+    if (!env.EMAIL_FROM) {
+      throw new AppError(503, "Email sender is not configured.", {
+        code: "EMAIL_NOT_CONFIGURED",
+      });
+    }
+    const greeting = fullname || "there";
+    const message = {
+      to: email,
+      from: env.EMAIL_FROM,
+      subject: "Reset your Cozie password",
+      text: `Hello ${greeting}!\n\nYour Cozie password reset code is: ${otp}\n\nThis code will expire in 10 minutes.\n\nIf you didn't request this, please ignore this email.`,
+      html: `
+        <!DOCTYPE html>
+        <html><body style="font-family:system-ui,sans-serif;background:#f5f5f5;padding:20px;">
+          <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;">
+            <div style="background:linear-gradient(135deg,#a855f7 0%,#ec4899 100%);padding:30px;text-align:center;color:#fff;">
+              <h1 style="margin:0;font-size:28px;">Cozie</h1>
+            </div>
+            <div style="padding:30px;">
+              <p><strong>Hello ${greeting}!</strong></p>
+              <p>Use the code below to reset your password:</p>
+              <div style="font-size:48px;font-weight:700;color:#a855f7;letter-spacing:8px;text-align:center;margin:20px 0;">${otp}</div>
+              <p>This code will expire in <strong>10 minutes</strong>.</p>
+              <p>If you didn't request a password reset, you can safely ignore this email.</p>
+            </div>
+          </div>
+        </body></html>
+      `,
+    };
+    try {
+      const response = await sgMail.send(message);
+      logger.info({ email, statusCode: response[0]?.statusCode }, "Password reset email sent");
+    } catch (err) {
+      logger.error(
+        { err: err.message, statusCode: err.code || err.response?.statusCode },
+        "Failed to send password reset email"
+      );
+      throw err;
+    }
+  },
 };
