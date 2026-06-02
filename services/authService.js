@@ -207,6 +207,69 @@ export const authService = {
     }
   },
 
+  /**
+   * BUG-006 fix: Forgot-password flow.
+   * Sends a 6-digit OTP to the user's email that can be used to set a new password.
+   * Always responds with the same message to avoid leaking whether the email exists.
+   */
+  async forgotPassword({ email }) {
+    const user = await userRepository.findByEmail(email);
+    // Silently succeed when the email is not found — never leak user existence
+    if (!user) return { message: "If that email exists, a reset code has been sent." };
+
+    const otp = generateOTP();
+    const otpHash = await hashOTP(otp);
+    const otpExpiresAt = new Date(Date.now() + OTP_TTL_MIN * 60 * 1000);
+
+    await userRepository.update(user.id, {
+      passwordResetOtp: { hash: otpHash, expiresAt: otpExpiresAt },
+    });
+
+    try {
+      await emailService.sendPasswordResetEmail(email, otp, user.fullname);
+    } catch (err) {
+      logger.error({ err: err.message, email }, "Failed to send password reset email");
+      throw new AppError(503, "Could not send the reset email. Please try again.", {
+        code: "EMAIL_SEND_FAILED",
+      });
+    }
+
+    return { message: "If that email exists, a reset code has been sent." };
+  },
+
+  /**
+   * BUG-006 fix: Reset password using the OTP sent to the user's email.
+   */
+  async resetPassword({ email, otp, newPassword }) {
+    const user = await userRepository.findByEmail(email);
+    if (!user) throw AppError.badRequest("Invalid or expired reset code.");
+
+    const resetOtp = user.passwordResetOtp;
+    if (!resetOtp?.hash || !resetOtp?.expiresAt) {
+      throw AppError.badRequest("No password reset was requested for this account.");
+    }
+
+    const expiresAt = resetOtp.expiresAt?.toDate
+      ? resetOtp.expiresAt.toDate()
+      : new Date(resetOtp.expiresAt);
+
+    if (Date.now() > expiresAt.getTime()) {
+      throw AppError.badRequest("Reset code has expired. Please request a new one.");
+    }
+
+    const matches = await verifyOTPHash(otp, resetOtp.hash);
+    if (!matches) throw AppError.badRequest("Invalid reset code.");
+
+    const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    await userRepository.update(user.id, {
+      password: hashedPassword,
+      passwordResetOtp: null,
+    });
+
+    const token = signAuthToken({ id: user.id });
+    return { token, message: "Password reset successfully." };
+  },
+
   async verifyOtp({ email, otp }) {
     const user = await userRepository.findByEmail(email);
     if (!user) throw AppError.notFound("User not found");
