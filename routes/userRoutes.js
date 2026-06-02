@@ -28,6 +28,8 @@ import {
   getPublicProfile,
   getUserPosts,
   getUserLikedSongs,
+  forgotPassword,
+  resetPassword,
 } from "../controllers/userController.js";
 import {
   checkFavorite,
@@ -184,5 +186,9 @@ router.get(
   validate({ params: followUserIdParamSchema }),
   getUserLikedSongs
 );
+
+// --- Password reset (BUG-006 fix) ----------------------------------------
+router.post("/forgot-password", authLimiter, forgotPassword);
+router.post("/reset-password", authLimiter, resetPassword);
 
 export default router;
