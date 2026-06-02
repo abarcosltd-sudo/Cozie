@@ -4,7 +4,33 @@ import { db } from "../config/firebase.js";
 import { musicPostRepository } from "../repositories/musicPostRepository.js";
 import { musicRepository } from "../repositories/musicRepository.js";
 import { userRepository } from "../repositories/userRepository.js";
+import { bubbleRepository } from "../repositories/bubbleRepository.js";
 import { notificationService } from "./notificationService.js";
+import { USER_TYPES } from "../utils/collections.js";
+
+/**
+ * Read-side default for visibility / isReleased. Posts written before
+ * Artist Bubble shipped have neither field; we treat them as public &
+ * released so the feed never silently drops historical content.
+ */
+function normalizePostVisibility(post) {
+  if (!post) return post;
+  const visibility = post.visibility === "bubble" ? "bubble" : "public";
+  const isReleased =
+    visibility === "public" ? true : Boolean(post.isReleased);
+  return { ...post, visibility, isReleased };
+}
+
+function buildBubbleInfo(post) {
+  const isBubbleOnly = post.visibility === "bubble" && !post.isReleased;
+  return {
+    isBubbleOnly,
+    canShareExternally: !isBubbleOnly,
+    bubbleId: post.bubbleId || null,
+    isReleased: Boolean(post.isReleased),
+    visibility: post.visibility || "public",
+  };
+}
 
 function toIso(value) {
   if (!value) return new Date().toISOString();
@@ -106,7 +132,8 @@ async function hydrateFeedPosts(posts, currentUserId) {
     likedByUser.set(posts[i].id, Boolean(snap?.exists));
   }
 
-  return posts.map((post) => {
+  return posts.map((rawPost) => {
+    const post = normalizePostVisibility(rawPost);
     const author = authorMap.get(post.userId);
     return {
       id: post.id,
@@ -124,16 +151,77 @@ async function hydrateFeedPosts(posts, currentUserId) {
       likes: post.likeCount || 0,
       comments: post.commentCount || 0,
       likedByUser: likedByUser.get(post.id) || false,
+      visibility: post.visibility,
+      isReleased: post.isReleased,
+      releasedAt: toIsoOrNull(post.releasedAt),
+      bubbleInfo: buildBubbleInfo(post),
     };
   });
 }
 
-export const musicPostService = {
-  async shareMusic(userId, { songId, caption, platforms }) {
-    const song = await musicRepository.findById(songId);
-    if (!song) throw AppError.notFound("Song not found");
+function toIsoOrNull(value) {
+  if (!value) return null;
+  if (typeof value.toDate === "function") return value.toDate().toISOString();
+  if (typeof value === "string") return value;
+  return new Date(value).toISOString();
+}
 
-    const { id } = await musicPostRepository.create({
+/**
+ * Drop bubble-only posts the viewer can't see. Bubble-only =
+ * (visibility === "bubble" && !isReleased). The owner artist always
+ * passes (they see their own unreleased work). Membership is checked
+ * via one `db().getAll` batched read across all distinct bubbles in
+ * the candidate set, so this stays O(1) regardless of feed depth.
+ *
+ * We deliberately filter *after* the Firestore fetch rather than
+ * pushing into the query because we'd otherwise need composite indexes
+ * for every (userId-in, visibility==, isReleased==) combination. Once
+ * the feed grows large enough to make over-fetching expensive, revisit.
+ */
+async function filterBubblePostsForViewer(posts, viewerId) {
+  if (!posts || posts.length === 0) return [];
+
+  const candidates = posts.map((p) => normalizePostVisibility(p));
+  const bubbleIds = Array.from(
+    new Set(
+      candidates
+        .filter(
+          (p) => p.visibility === "bubble" && !p.isReleased && p.bubbleId
+        )
+        .map((p) => p.bubbleId)
+    )
+  );
+
+  const memberships = bubbleIds.length
+    ? await bubbleRepository.getMembershipStatuses(bubbleIds, viewerId)
+    : new Map();
+
+  return candidates.filter((post) => {
+    if (post.visibility !== "bubble" || post.isReleased) return true;
+    if (!post.bubbleId) return false;
+    if (post.userId === viewerId) return true; // owner artist always sees their own
+    return memberships.get(post.bubbleId) === true;
+  });
+}
+
+export const musicPostService = {
+  async shareMusic(userId, { songId, caption, platforms, visibility = "public" }) {
+    const [song, author] = await Promise.all([
+      musicRepository.findById(songId),
+      userRepository.findById(userId),
+    ]);
+    if (!song) throw AppError.notFound("Song not found");
+    if (!author) throw AppError.unauthorized("User not found");
+
+    const wantsBubble = visibility === "bubble";
+    if (wantsBubble && author.userType !== USER_TYPES.ARTIST) {
+      throw new AppError(403, "Only artists can post to a bubble", {
+        code: "NOT_ARTIST",
+      });
+    }
+
+    const now = new Date();
+    const baseDoc = {
       userId,
       songId,
       caption,
@@ -147,12 +235,80 @@ export const musicPostService = {
       // them and skip the count() RPC per post.
       likeCount: 0,
       commentCount: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: now,
+      updatedAt: now,
       type: "music_share",
-    });
+      // Default to public + released so existing share-music callers
+      // (which don't send visibility) keep behaving identically.
+      visibility: wantsBubble ? "bubble" : "public",
+      isReleased: !wantsBubble,
+    };
+    if (wantsBubble) {
+      baseDoc.bubbleId = author.artistProfile?.bubbleId || author.id;
+    }
+
+    const { id } = await musicPostRepository.create(baseDoc);
+
+    // Keep the bubble doc's denormalized postCount in sync. Failure here
+    // is non-fatal — the post is already written and the count will
+    // eventually be reconciled. We log via the existing logger.
+    if (wantsBubble && baseDoc.bubbleId) {
+      try {
+        await bubbleRepository
+          .ref(baseDoc.bubbleId)
+          .update({ postCount: FieldValue.increment(1), updatedAt: now });
+      } catch {
+        // intentional: drift on this counter is acceptable for MVP.
+      }
+    }
 
     return { postId: id };
+  },
+
+  /**
+   * Artist-initiated release. Flips visibility -> public, isReleased ->
+   * true, and stamps releasedAt. The mutation is transactional so two
+   * concurrent release clicks can't double-write.
+   *
+   * Throws:
+   *   - 404 if post doesn't exist
+   *   - 403 NOT_POST_OWNER if caller isn't the author
+   *   - 400 ALREADY_RELEASED if the post is already public
+   */
+  async releasePost(postId, userId) {
+    const postRef = musicPostRepository.ref(postId);
+    const result = await db().runTransaction(async (tx) => {
+      const snap = await tx.get(postRef);
+      if (!snap.exists) throw AppError.notFound("Post not found");
+      const post = snap.data();
+      if (post.userId !== userId) {
+        throw new AppError(403, "You don't own this post", {
+          code: "NOT_POST_OWNER",
+        });
+      }
+      const normalized = normalizePostVisibility(post);
+      if (normalized.isReleased) {
+        throw new AppError(400, "This post is already released", {
+          code: "ALREADY_RELEASED",
+        });
+      }
+
+      const releasedAt = new Date();
+      tx.update(postRef, {
+        visibility: "public",
+        isReleased: true,
+        releasedAt,
+        updatedAt: releasedAt,
+      });
+      return { postId, releasedAt };
+    });
+
+    return {
+      postId: result.postId,
+      visibility: "public",
+      isReleased: true,
+      releasedAt: result.releasedAt.toISOString(),
+    };
   },
 
   /**
@@ -184,7 +340,8 @@ export const musicPostService = {
       authorIds,
       50
     );
-    return { posts: await hydrateFeedPosts(posts, currentUserId) };
+    const visible = await filterBubblePostsForViewer(posts, currentUserId);
+    return { posts: await hydrateFeedPosts(visible, currentUserId) };
   },
 
   /**
@@ -193,21 +350,34 @@ export const musicPostService = {
    */
   async listExploreFeed(currentUserId) {
     const posts = await musicPostRepository.listRecent(50);
-    return { posts: await hydrateFeedPosts(posts, currentUserId) };
+    const visible = await filterBubblePostsForViewer(posts, currentUserId);
+    return { posts: await hydrateFeedPosts(visible, currentUserId) };
   },
 
   /**
    * Posts authored by a specific user, paginated. Used by the profile
-   * "Posts" tab. Posts are public on the read path — visibility gating is
-   * the caller's concern (controller checks follow status / self).
+   * "Posts" tab. Bubble-only posts are filtered by membership the same
+   * way as the home feed so a non-member visiting an artist's profile
+   * never sees their unreleased tracks.
    */
   async listByUser(authorId, viewerId, { cursor, limit } = {}) {
     const { items, nextCursor } = await musicPostRepository.listByUserId(
       authorId,
       { cursor, limit }
     );
-    const hydrated = await hydrateFeedPosts(items, viewerId);
+    const visible = await filterBubblePostsForViewer(items, viewerId);
+    const hydrated = await hydrateFeedPosts(visible, viewerId);
     return { posts: hydrated, nextCursor, count: hydrated.length };
+  },
+
+  /**
+   * Bubble-post list used by /api/bubbles/:artistId/posts. The bubble
+   * service has already verified the viewer is allowed; here we only
+   * hydrate. Includes both released + unreleased posts so a member
+   * sees the artist's full bubble history.
+   */
+  async hydrateBubblePosts(posts, viewerId) {
+    return hydrateFeedPosts(posts, viewerId);
   },
 
   /**

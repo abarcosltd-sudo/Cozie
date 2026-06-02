@@ -22,6 +22,7 @@ import {
   updateProfile,
   generateUploadURL,
   getAvailableUsers,
+  getAvailableArtists,
   getPublicProfile,
   getUserPosts,
   getUserLikedSongs,
@@ -43,6 +44,7 @@ import {
   userIdParamSchema as followUserIdParamSchema,
   followListQuerySchema,
 } from "../validators/followValidators.js";
+import { availableArtistsQuerySchema } from "../validators/bubbleValidators.js";
 
 const router = express.Router();
 
@@ -58,6 +60,12 @@ router.post(
 router.get("/profile", protect, getProfile);
 router.get("/me", protect, getCurrentUser);
 router.get("/available", protect, getAvailableUsers);
+router.get(
+  "/available-artists",
+  protect,
+  validate({ query: availableArtistsQuerySchema }),
+  getAvailableArtists
+);
 
 router.post(
   "/preferences",

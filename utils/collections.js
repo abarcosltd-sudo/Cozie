@@ -4,6 +4,7 @@ export const COLLECTIONS = Object.freeze({
   MUSIC_POSTS: "musicPosts",
   CONVERSATIONS: "conversations",
   REELS: "reels",
+  BUBBLES: "bubbles",
 });
 
 export const SUBCOLLECTIONS = Object.freeze({
@@ -18,6 +19,12 @@ export const SUBCOLLECTIONS = Object.freeze({
   FOLLOWING: "following",
   NOTIFICATIONS: "notifications",
   VIEWS: "views",
+  MEMBERS: "members",
+});
+
+export const USER_TYPES = Object.freeze({
+  USER: "user",
+  ARTIST: "artist",
 });
 
 /**

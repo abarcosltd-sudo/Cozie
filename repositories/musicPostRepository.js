@@ -19,6 +19,10 @@ export const musicPostRepository = {
     return { id: ref.id };
   },
 
+  async update(postId, updates) {
+    await postsCol().doc(postId).update({ ...updates, updatedAt: new Date() });
+  },
+
   async listRecent(limit = 50) {
     const snap = await postsCol()
       .orderBy("createdAt", "desc")
@@ -35,6 +39,35 @@ export const musicPostRepository = {
   async listByUserId(userId, { cursor, limit = 30 } = {}) {
     let q = postsCol()
       .where("userId", "==", userId)
+      .orderBy("createdAt", "desc")
+      .limit(limit + 1);
+    if (cursor) {
+      const cursorDoc = await postsCol().doc(cursor).get();
+      if (cursorDoc.exists) q = q.startAfter(cursorDoc);
+    }
+    const snap = await q.get();
+    const overflow = snap.docs.length > limit;
+    const docs = (overflow ? snap.docs.slice(0, limit) : snap.docs).map((d) => ({
+      id: d.id,
+      ...d.data(),
+    }));
+    const nextCursor = overflow ? docs[docs.length - 1].id : null;
+    return { items: docs, nextCursor };
+  },
+
+  /**
+   * Cursor-paginated bubble posts (every post belonging to a given
+   * artist's bubble, both unreleased and released, newest first). Used
+   * by /api/bubbles/:artistId/posts for the bubble profile view.
+   *
+   * We filter by `bubbleId == artistId` rather than `userId == artistId`
+   * because a post is bubble-only only when it has an explicit bubbleId.
+   * Released posts also retain their bubbleId so the bubble profile
+   * keeps showing the artist's history.
+   */
+  async listBubblePosts(artistId, { cursor, limit = 20 } = {}) {
+    let q = postsCol()
+      .where("bubbleId", "==", artistId)
       .orderBy("createdAt", "desc")
       .limit(limit + 1);
     if (cursor) {
