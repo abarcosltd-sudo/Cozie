@@ -61,6 +61,10 @@ export const verifyOtpSchema = z.object({
   otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
 });
 
+export const resendOtpSchema = z.object({
+  email: emailField,
+});
+
 export const preferencesSchema = z.object({
   genres: z.array(z.string().trim().min(1)).min(1),
 });
