@@ -1,3 +1,4 @@
+import { AppError } from "../utils/AppError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ok } from "../utils/response.js";
 import { authService } from "../services/authService.js";
@@ -104,5 +105,22 @@ export const getUserPosts = asyncHandler(async (req, res) => {
  */
 export const getUserLikedSongs = asyncHandler(async (req, res) => {
   const result = await musicService.listUserLikedSongs(req.params.userId);
+  return ok(res, result);
+});
+
+// BUG-006: Forgot password — sends OTP reset code to email
+export const forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  if (!email) throw AppError.badRequest("Email is required.");
+  const result = await authService.forgotPassword({ email: email.toLowerCase().trim() });
+  return ok(res, result);
+});
+
+// BUG-006: Reset password — verifies OTP and sets new password
+export const resetPassword = asyncHandler(async (req, res) => {
+  const { email, otp, newPassword } = req.body;
+  if (!email || !otp || !newPassword) throw AppError.badRequest("email, otp and newPassword are required.");
+  if (newPassword.length < 8) throw AppError.badRequest("Password must be at least 8 characters.");
+  const result = await authService.resetPassword({ email: email.toLowerCase().trim(), otp, newPassword });
   return ok(res, result);
 });
