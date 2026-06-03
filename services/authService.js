@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { FieldValue } from "firebase-admin/firestore";
 import { AppError } from "../utils/AppError.js";
 import {
   signAuthToken,
@@ -11,11 +12,26 @@ import { userRepository } from "../repositories/userRepository.js";
 import { bubbleRepository } from "../repositories/bubbleRepository.js";
 import { bubbleService } from "./bubbleService.js";
 import { emailService } from "./emailService.js";
+import { googleOAuthVerifier } from "./oauth/googleOAuthVerifier.js";
 import { logger } from "../utils/logger.js";
 import { USER_TYPES } from "../utils/collections.js";
 
 const OTP_TTL_MIN = 10;
 const BCRYPT_ROUNDS = 12;
+
+/**
+ * Shape the auth endpoints return alongside the JWT. Mirrors the existing
+ * `login` projection so the frontend's `AuthLoginResponse` type works for
+ * Google flows too — no new types or context branches needed.
+ */
+function publicAuthUser(user) {
+  return {
+    id: user.id,
+    fullname: user.fullname,
+    username: user.username,
+    email: user.email,
+  };
+}
 
 export const authService = {
   async signup({
@@ -295,4 +311,196 @@ export const authService = {
     const token = signAuthToken({ id: user.id });
     return { token, message: "Email verified successfully" };
   },
+
+  // --- Google OAuth ---------------------------------------------------------
+  // These two methods live alongside `signup` / `login` and reuse the
+  // existing JWT issuance + Firestore writes. They intentionally do NOT
+  // touch the password/OTP code paths above — the OTP flow stays exactly
+  // as it is today. New accounts created via Google get `isVerified: true`
+  // directly because Google's `email_verified` claim is proof of ownership;
+  // they therefore bypass `/verify-otp` and never have an `otp` field.
+
+  /**
+   * Sign up with Google. Verifies the ID token, then either:
+   *   - creates a brand-new user (+ bubble doc atomically for artists), OR
+   *   - returns the existing Google account (idempotent), OR
+   *   - auto-links to an existing password account with the same email
+   *     (safe because Google attested email ownership).
+   *
+   * Username is chosen on the frontend (Google has no username concept)
+   * and must be unique. We surface a 409 with a stable error code so the
+   * UI can prompt the user to pick a different one without losing form
+   * state. For artists, `artistProfile` must already be present per the
+   * Zod schema's `superRefine`.
+   */
+  async signupWithGoogle({ idToken, username, userType = USER_TYPES.USER, artistProfile = null }) {
+    const profile = await googleOAuthVerifier.verifyIdToken(idToken);
+    const { providerUid, email, name, picture } = profile;
+    const isArtist = userType === USER_TYPES.ARTIST;
+
+    // 1. Idempotent path — Google account already linked. Behaves like
+    //    login. We deliberately do NOT enforce username uniqueness or
+    //    artist-fields here; the account already exists.
+    const existingGoogle = await userRepository.findByGoogleSub(providerUid);
+    if (existingGoogle) {
+      const token = signAuthToken({ id: existingGoogle.id });
+      return {
+        token,
+        user: publicAuthUser(existingGoogle),
+        newAccount: false,
+        linked: false,
+      };
+    }
+
+    // 2. Auto-link path — same email exists from the OTP flow. Add Google
+    //    as an additional provider on that account and mark verified.
+    const existingByEmail = await userRepository.findByEmail(email);
+    if (existingByEmail) {
+      await userRepository.update(
+        existingByEmail.id,
+        buildAutoLinkUpdates(existingByEmail, providerUid, picture)
+      );
+      const token = signAuthToken({ id: existingByEmail.id });
+      return {
+        token,
+        user: publicAuthUser(existingByEmail),
+        newAccount: false,
+        linked: true,
+      };
+    }
+
+    // 3. Brand-new account. Mirrors the OTP `signup` write but with no
+    //    password, no OTP, and `isVerified: true`. Artist users get the
+    //    sibling bubble doc in the same Firestore batch so we never end
+    //    up with a half-registered artist.
+    const usernameTaken = await userRepository.findByUsername(username);
+    if (usernameTaken) {
+      throw new AppError(409, "Username already taken", {
+        code: "USERNAME_TAKEN",
+      });
+    }
+
+    const now = new Date();
+    const newUserRef = userRepository.refNew();
+    const userId = newUserRef.id;
+
+    const userData = {
+      id: userId,
+      fullname: name || username,
+      username,
+      email,
+      password: null,
+      isVerified: true,
+      otp: null,
+      authProviders: ["google"],
+      googleSub: providerUid,
+      photoURL: picture || null,
+      followerCount: 0,
+      followingCount: 0,
+      visibility: "public",
+      unreadNotificationCount: 0,
+      userType: isArtist ? USER_TYPES.ARTIST : USER_TYPES.USER,
+      createdAt: now,
+    };
+
+    if (isArtist) {
+      userData.artistProfile = {
+        artistName: artistProfile.artistName,
+        genres: artistProfile.genres,
+        label: artistProfile.label || null,
+        website: artistProfile.website || null,
+        bio: artistProfile.bio || null,
+        isVerified: false,
+        verificationStatus: "none",
+        bubbleId: userId,
+      };
+    }
+
+    const batch = db().batch();
+    batch.set(newUserRef, userData);
+    if (isArtist) {
+      const bubbleDoc = bubbleService.buildArtistBubbleDoc({
+        userId,
+        artistName: artistProfile.artistName,
+        now,
+      });
+      batch.set(bubbleRepository.ref(userId), bubbleDoc);
+    }
+    await batch.commit();
+
+    const token = signAuthToken({ id: userId });
+    return {
+      token,
+      user: publicAuthUser({ id: userId, ...userData }),
+      newAccount: true,
+      linked: false,
+    };
+  },
+
+  /**
+   * Sign in with Google. Verifies the ID token, then:
+   *   - returns the existing Google account, OR
+   *   - auto-links to an existing password account with the same email
+   *     (Google verified the email, so this is safe), OR
+   *   - throws ACCOUNT_NOT_FOUND so the UI can redirect to signup.
+   *
+   * We never create a new account here — that's an explicit user choice
+   * gated by the signup form (which collects username + role + artist
+   * fields).
+   */
+  async loginWithGoogle({ idToken }) {
+    const profile = await googleOAuthVerifier.verifyIdToken(idToken);
+    const { providerUid, email, picture } = profile;
+
+    const existingGoogle = await userRepository.findByGoogleSub(providerUid);
+    if (existingGoogle) {
+      const token = signAuthToken({ id: existingGoogle.id });
+      return { token, user: publicAuthUser(existingGoogle), linked: false };
+    }
+
+    const existingByEmail = await userRepository.findByEmail(email);
+    if (existingByEmail) {
+      await userRepository.update(
+        existingByEmail.id,
+        buildAutoLinkUpdates(existingByEmail, providerUid, picture)
+      );
+      const token = signAuthToken({ id: existingByEmail.id });
+      return { token, user: publicAuthUser(existingByEmail), linked: true };
+    }
+
+    throw new AppError(404, "No Cozie account for this Google email", {
+      code: "ACCOUNT_NOT_FOUND",
+    });
+  },
 };
+
+/**
+ * Build the partial-update payload for auto-linking Google to an account
+ * that already exists by email.
+ *
+ *   - `googleSub` is always written (it's how we'll find them next time).
+ *   - `authProviders` uses arrayUnion so it's idempotent across repeat
+ *     sign-ins. Legacy OTP accounts have no `authProviders` field, so we
+ *     also union `"password"` back in when the existing doc has a stored
+ *     password hash — otherwise the array would be a misleading
+ *     `["google"]` for a user who can still sign in with their password.
+ *   - `isVerified: true` because Google attested the email.
+ *   - `otp: null` clears any in-flight unverified-email OTP so a stale
+ *     verify request can't succeed afterwards.
+ *   - `photoURL` is backfilled only when missing — never overwrite a
+ *     user-chosen avatar with the Google avatar.
+ */
+function buildAutoLinkUpdates(existingUser, providerUid, picture) {
+  const providersToAdd = ["google"];
+  if (existingUser.password) providersToAdd.push("password");
+  const updates = {
+    googleSub: providerUid,
+    authProviders: FieldValue.arrayUnion(...providersToAdd),
+    isVerified: true,
+    otp: null,
+  };
+  if (!existingUser.photoURL && picture) {
+    updates.photoURL = picture;
+  }
+  return updates;
+}

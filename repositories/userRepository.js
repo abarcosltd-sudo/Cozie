@@ -39,6 +39,19 @@ export const userRepository = {
     return { id: snap.docs[0].id, ...snap.docs[0].data() };
   },
 
+  /**
+   * Lookup by the Google `sub` claim. Single-field equality query — no
+   * composite index required (Firestore auto-creates single-field indexes).
+   * Returns null when the field is unset on every doc, which matches the
+   * legacy state (existing OTP users have no `googleSub`).
+   */
+  async findByGoogleSub(sub) {
+    if (!sub) return null;
+    const snap = await usersCol().where("googleSub", "==", sub).limit(1).get();
+    if (snap.empty) return null;
+    return { id: snap.docs[0].id, ...snap.docs[0].data() };
+  },
+
   async create(data) {
     const ref = usersCol().doc();
     await ref.set({ id: ref.id, ...data, createdAt: new Date() });

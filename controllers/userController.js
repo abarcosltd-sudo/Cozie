@@ -27,6 +27,16 @@ export const resendOTP = asyncHandler(async (req, res) => {
   return ok(res, result);
 });
 
+export const signupWithGoogle = asyncHandler(async (req, res) => {
+  const result = await authService.signupWithGoogle(req.body);
+  return ok(res, result);
+});
+
+export const loginWithGoogle = asyncHandler(async (req, res) => {
+  const result = await authService.loginWithGoogle(req.body);
+  return ok(res, result);
+});
+
 export const getProfile = asyncHandler(async (req, res) => {
   const user = await userService.getProfile(req.auth.id);
   return ok(res, { user });

@@ -4,7 +4,17 @@ import { USER_TYPES } from "../utils/collections.js";
 
 function publicUser(user) {
   if (!user) return null;
-  const { password: _pw, otp: _otp, ...rest } = user;
+  // Strip credentials + provider identifiers. `googleSub` is the Google
+  // `sub` claim — useful server-side for lookup, but the client has no
+  // reason to know it. `authProviders` is kept so the UI can branch
+  // (e.g. hide "set a password" CTA for users who already have one).
+  const {
+    password: _pw,
+    otp: _otp,
+    passwordResetOtp: _pwReset,
+    googleSub: _googleSub,
+    ...rest
+  } = user;
   return rest;
 }
 
