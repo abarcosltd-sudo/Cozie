@@ -24,6 +24,13 @@ const envSchema = z.object({
   EMAIL_FROM: z.string().email().optional(),
   EMAIL_USER: z.string().optional(),
 
+  // Google OAuth (used by /api/users/google/* routes). Optional so the
+  // server still boots in environments where Google sign-in isn't enabled;
+  // googleOAuthVerifier throws at request time when missing.
+  // Accepts a comma-separated list to support multiple platforms (web /
+  // iOS / Android) sharing the same backend.
+  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+
   ALLOWED_ORIGINS: z.string().optional(),
 
   // Mux video pipeline (reels). All optional so the server boots in

@@ -7,6 +7,8 @@ import {
   loginSchema,
   verifyOtpSchema,
   resendOtpSchema,
+  googleSignupSchema,
+  googleLoginSchema,
   preferencesSchema,
   updateProfileSchema,
   generateUploadUrlSchema,
@@ -19,6 +21,8 @@ import {
   getProfile,
   verifyOTP,
   resendOTP,
+  signupWithGoogle,
+  loginWithGoogle,
   savePreferences,
   getCurrentUser,
   updateProfile,
@@ -65,6 +69,24 @@ router.post(
   authLimiter,
   validate({ body: resendOtpSchema }),
   resendOTP
+);
+
+// --- Google OAuth -----------------------------------------------------------
+// Sit alongside `/signup` and `/login` and reuse the same rate limiter.
+// New accounts created via Google bypass `/verify-otp` because Google's
+// `email_verified` claim is proof of ownership; OTP routes above remain
+// the only path for email+password signups.
+router.post(
+  "/google/signup",
+  authLimiter,
+  validate({ body: googleSignupSchema }),
+  signupWithGoogle
+);
+router.post(
+  "/google/login",
+  authLimiter,
+  validate({ body: googleLoginSchema }),
+  loginWithGoogle
 );
 
 router.get("/profile", protect, getProfile);

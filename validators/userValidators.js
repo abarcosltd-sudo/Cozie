@@ -56,6 +56,42 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+/**
+ * Google sign-up body. Mirrors `signupSchema` but does NOT accept email,
+ * fullname, or password — those are derived from the verified Google ID
+ * token on the server. We still require `username` because Google profiles
+ * don't have one, and we still enforce the `userType <-> artistProfile`
+ * coupling so artists can be created in one round-trip without falling
+ * back to a second "complete your profile" call.
+ */
+export const googleSignupSchema = z
+  .object({
+    idToken: z.string().min(1),
+    username: usernameField,
+    userType: z.enum(["user", "artist"]).optional().default("user"),
+    artistProfile: artistProfileInputSchema.optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.userType === "artist" && !data.artistProfile) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["artistProfile"],
+        message: "artistProfile is required when registering as an artist",
+      });
+    }
+    if (data.userType === "user" && data.artistProfile) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["artistProfile"],
+        message: "artistProfile may only be provided when userType is 'artist'",
+      });
+    }
+  });
+
+export const googleLoginSchema = z.object({
+  idToken: z.string().min(1),
+});
+
 export const verifyOtpSchema = z.object({
   email: emailField,
   otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
